@@ -129,7 +129,7 @@
         <p>If you feel like procrastinating, try setting a timer for 10 minutes and start small.</p>
         <div class="timer">
           <center><button onclick="startTimer()">Start Timer</button></center>
-          <div id="timer-display" class="timer-display">00:10</div>
+          <div id="timer-display" class="timer-display">10:00</div>
         </div>
       </div>
     </div>
@@ -152,17 +152,25 @@
       }
     }
     function startTimer() {
-      let timerDisplay = document.getElementById('timer-display');
-      let timeLeft = 10;
-      let countdown = setInterval(() => {
-        timeLeft--;
-        timerDisplay.textContent = `00:${timeLeft < 10 ? '0' : ''}${timeLeft}`;
-        if (timeLeft <= 0) {
-          clearInterval(countdown);
-          alert("Time's up! Get back to work!");
-        }
-      }, 1000);
+  let timerDisplay = document.getElementById('timer-display');
+  let timeLeft = 10 * 60; // 10 minutes in seconds
+
+  let countdown = setInterval(() => {
+    let minutes = Math.floor(timeLeft / 60);
+    let seconds = timeLeft % 60;
+
+    timerDisplay.textContent = 
+      `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      alert("Time's up! Get back to work!");
+    } else {
+      timeLeft--;
     }
+  }, 1000);
+}
+
     function showSolution(type) {
       let challenge = type === 'time' ? document.getElementById('quiz').value : document.getElementById('quiz-procrastination').value;
       let solutions = {
