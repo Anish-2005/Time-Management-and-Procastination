@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Management & Procrastination</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Poppins', sans-serif;
+    }
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      flex-direction: column;
+      padding: 20px;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 900px;
+      background: #1e1e1e;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .app-header h1 {
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #bb86fc;
+    }
+    .sections-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .section {
+      padding: 20px;
+      border-radius: 8px;
+      background: #2a2a2a;
+      box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+      text-align: left;
+    }
+    .task-input, .quiz-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .task-input input, .quiz-select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #444;
+      border-radius: 5px;
+      background: #333;
+      color: #e0e0e0;
+    }
+    .task-input button, .quiz-button, .timer button {
+      padding: 12px;
+      border: none;
+      background: #bb86fc;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: 0.3s;
+    }
+    .task-input button:hover, .quiz-button:hover, .timer button:hover {
+      background: #9b59b6;
+    }
+    .timer-display {
+      font-size: 24px;
+      font-weight: bold;
+      margin-top: 10px;
+      color: #bb86fc;
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      .app-container {
+        padding: 20px;
+      }
+      .task-input, .quiz-container {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>Time Management & Procrastination</h1>
+    </header>
+    <div class="sections-container">
+      <div class="section time-management">
+        <h2>Time Management</h2>
+        <div class="quiz-container">
+          <label for="quiz">Identify your challenge:</label>
+          <select id="quiz" class="quiz-select">
+            <option value="distraction">Distraction</option>
+            <option value="sleepy">Sleepy</option>
+            <option value="demotivated">Demotivated</option>
+          </select>
+          <button class="quiz-button" onclick="showSolution('time')">Get Solution</button>
+        </div>
+        <div class="task-input">
+          <input type="text" id="task-input" placeholder="Enter your task here..." />
+          <button onclick="addTask()">Add Task</button>
+        </div>
+        <div class="task-list" id="task-list"></div>
+      </div>
+      <div class="section procrastination">
+        <h2>Procrastination</h2>
+        <div class="quiz-container">
+          <label for="quiz-procrastination">Identify your challenge:</label>
+          <select id="quiz-procrastination" class="quiz-select">
+            <option value="distraction">Distraction</option>
+            <option value="improper_plan">Improper Plan</option>
+            <option value="fear">Fear & Anxiety</option>
+          </select>
+          <button class="quiz-button" onclick="showSolution('procrastination')">Get Solution</button>
+        </div>
+        <p>If you feel like procrastinating, try setting a timer for 10 minutes and start small.</p>
+        <div class="timer">
+          <center><button onclick="startTimer()">Start Timer</button></center>
+          <div id="timer-display" class="timer-display">00:10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function addTask() {
+      let taskInput = document.getElementById('task-input');
+      let taskList = document.getElementById('task-list');
+      if (taskInput.value.trim() !== '') {
+        let taskItem = document.createElement('div');
+        taskItem.textContent = taskInput.value;
+        taskItem.style.padding = '10px';
+        taskItem.style.marginTop = '5px';
+        taskItem.style.background = '#333';
+        taskItem.style.color = '#e0e0e0';
+        taskItem.style.borderRadius = '5px';
+        taskItem.style.boxShadow = '1px 1px 5px rgba(0, 0, 0, 0.3)';
+        taskList.appendChild(taskItem);
+        taskInput.value = '';
+      }
+    }
+    function startTimer() {
+      let timerDisplay = document.getElementById('timer-display');
+      let timeLeft = 10;
+      let countdown = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = `00:${timeLeft < 10 ? '0' : ''}${timeLeft}`;
+        if (timeLeft <= 0) {
+          clearInterval(countdown);
+          alert("Time's up! Get back to work!");
+        }
+      }, 1000);
+    }
+    function showSolution(type) {
+      let challenge = type === 'time' ? document.getElementById('quiz').value : document.getElementById('quiz-procrastination').value;
+      let solutions = {
+        distraction: "Use Pomodoro technique and block distractions.",
+        sleepy: "Maintain a proper sleep schedule and stay hydrated.",
+        demotivated: "Set small goals and reward yourself.",
+        improper_plan: "Break tasks into smaller steps and prioritize.",
+        fear: "Practice mindfulness and seek support from peers."
+      };
+      alert(solutions[challenge] || "Stay consistent and keep improving!");
+    }
+  </script>
+</body>
+</html>
