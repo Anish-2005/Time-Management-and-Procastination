@@ -32,7 +32,7 @@ const handleGoogleSignIn = async () => {
       {/* Navigation */}
       <nav className="px-6 py-4 border-b border-gray-700">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-purple-400">ChronoMaster</h1>
+          <h1 className="text-4xl font-bold text-purple-400">FOCUS</h1>
           {user ? (
             <div className="flex items-center gap-4">
               <span className="text-gray-300">Welcome, {user.displayName}</span>

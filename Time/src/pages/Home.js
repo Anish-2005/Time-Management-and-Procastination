@@ -11,7 +11,7 @@ const HomePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState('');
-  const [sessionDuration, setSessionDuration] = useState(1500); // Default: 25 minutes
+  const [sessionDuration, setSessionDuration] = useState(25); // Default: 25 minutes
   const [timeLeft, setTimeLeft] = useState(1500);
   const [laps, setLaps] = useState([]);
 const [isPaused, setIsPaused] = useState(false);
@@ -127,6 +127,8 @@ const [isPaused, setIsPaused] = useState(false);
     }
   };
 
+  const alarmSound = new Audio('/alarm.mp3'); // Path to public/alarm.mp3
+
   const startTimer = async () => {
     if (!isRunning) {
       setIsRunning(true);
@@ -185,6 +187,10 @@ const [isPaused, setIsPaused] = useState(false);
     } else if (timeLeft === 0) {
       setIsRunning(false);
       toast.success('Focus session completed!');
+      
+      // 🔊 Play alarm sound when time reaches zero
+      alarmSound.play().catch(error => console.error("Audio play failed:", error));
+  
       fetchStats();
     }
     return () => clearInterval(interval);
@@ -196,6 +202,7 @@ const [isPaused, setIsPaused] = useState(false);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+  
 
   // Animation variants
   const taskVariants = {
@@ -205,13 +212,13 @@ const [isPaused, setIsPaused] = useState(false);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
+    <div className="flex-row min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
       {/* Navigation */}
       <nav className="px-6 py-4 border-b border-gray-700 backdrop-blur-sm bg-gray-900/80">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-8">
             <Link to="/" className="text-2xl font-bold text-purple-400 flex items-center gap-2 hover:text-purple-300 transition-colors">
-              <FaCalendarDay className="w-6 h-6" /> ChronoMaster
+              <FaCalendarDay className="w-6 h-6" /> FOCUS
             </Link>
             <div className="flex gap-6 ml-8">
               <button 
@@ -256,7 +263,7 @@ const [isPaused, setIsPaused] = useState(false);
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto py-8 px-6">
+      <main className="flex-grow max-w-6xl mx-auto py-8 px-6">
         {activeTab === 'dashboard' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="p-6 bg-gray-700/30 rounded-xl backdrop-blur-sm border border-gray-600">
@@ -451,7 +458,7 @@ const [isPaused, setIsPaused] = useState(false);
 
       {/* Stats Footer */}
        {/* Footer (Sticky at Bottom) */}
-  <div className="mt-auto py-6 px-6 border-t border-gray-700 backdrop-blur-sm bg-gray-900/80">
+  <footer className="mt-auto py-6 px-6 border-t border-gray-700 backdrop-blur-sm bg-gray-900/80">
     <div className="max-w-6xl mx-auto flex justify-between text-gray-400">
       <div className="flex items-center gap-2">
         <FaClock className="w-5 h-5" />
@@ -466,7 +473,7 @@ const [isPaused, setIsPaused] = useState(false);
         Current Streak: {stats.currentStreak} days
       </div>
     </div>
-  </div>
+  </footer>
 </div>
   );
 };
