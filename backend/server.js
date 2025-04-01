@@ -114,71 +114,38 @@ const TaskSchema = new mongoose.Schema({
 TaskSchema.plugin(uniqueValidator);
 TaskSchema.index({ userId: 1, completed: 1 });
 TaskSchema.index({ dueDate: 1 });
-const Task = mongoose.model('Task', TaskSchema);
-
-const SessionSchema = new mongoose.Schema({
+const Task = mongoose.model('Task', new mongoose.Schema({
   userId: { type: String, required: true },
-  duration: { 
-    type: Number, 
-    required: true,
-    min: [300, 'Minimum session duration is 5 minutes'],
-    max: [14400, 'Maximum session duration is 4 hours']
-  },
+  text: { type: String, required: true },
+  completed: { type: Boolean, default: false },
+  dueDate: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+}));
+
+const FocusSession = mongoose.model('FocusSession', new mongoose.Schema({
+  userId: { type: String, required: true },
+  duration: { type: Number, required: true },
   startTime: { type: Date, required: true },
-  endTime: { 
-    type: Date, 
-    required: true,
-    validate: {
-      validator: function(v) {
-        return v > this.startTime;
-      },
-      message: 'End time must be after start time'
-    }
-  }
-});
-const FocusSession = mongoose.model('FocusSession', SessionSchema);
+  endTime: { type: Date, required: true }
+}));
 
 // Authentication Middleware
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Authorization header missing' });
-    
-    const token = authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Bearer token missing' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Authorization required' });
 
     const decoded = await admin.auth().verifyIdToken(token);
     req.user = decoded;
     next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
-    res.status(401).json({ error: 'Invalid or expired token' });
+    console.error('Authentication error:', error);
+    res.status(401).json({ error: 'Invalid token' });
   }
-};
-
-// WebSocket Server
-const wss = new WebSocket.Server({ noServer: true });
-
-// Broadcast function for WebSocket
-const broadcastUpdate = () => {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'DATA_UPDATE' }));
-    }
-  });
 };
 
 // API Routes
 const router = express.Router();
-
-router.get('/health', (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.status(200).json({
-    status: 'ok',
-    database: dbStatus,
-    timestamp: new Date().toISOString()
-  });
-});
 
 // Task Endpoints
 router.get('/tasks', authenticate, async (req, res) => {
@@ -186,7 +153,6 @@ router.get('/tasks', authenticate, async (req, res) => {
     const tasks = await Task.find({ userId: req.user.uid });
     res.json(tasks);
   } catch (error) {
-    console.error('Tasks fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
@@ -195,178 +161,46 @@ router.post('/tasks', authenticate, async (req, res) => {
   try {
     const task = new Task({
       userId: req.user.uid,
-      ...req.body
+      text: req.body.text,
+      dueDate: req.body.dueDate || new Date()
     });
-    
     await task.save();
-    broadcastUpdate();
     res.status(201).json(task);
   } catch (error) {
-    console.error('Task creation error:', error);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Invalid task data' });
   }
 });
 
-// Add validation middleware
-const validateObjectId = (req, res, next) => {
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-    return res.status(400).json({ error: "Invalid task ID format" });
-  }
-  next();
-};
-
-// Add detailed logging middleware
-router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
-  console.log('Update request:', {
-    taskId: req.params.id,
-    userId: req.user.uid,
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-
+router.put('/tasks/:id', authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndUpdate(
-      { 
-        _id: new mongoose.Types.ObjectId(req.params.id),
-        userId: req.user.uid 
-      },
-      req.body,
-      { 
-        new: true,
-        runValidators: true,
-        projection: { __v: 0 } // Exclude version key
-      }
-    ).lean();
-
-    if (!task) {
-      console.warn('Task not found:', {
-        taskId: req.params.id,
-        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
-      });
-      return res.status(404).json({ 
-        error: "Task not found",
-        recovery: "Please refresh your task list"
-      });
-    }
-
-    console.log('Update successful:', task);
-    broadcastUpdate();
+      { _id: req.params.id, userId: req.user.uid },
+      { completed: req.body.completed },
+      { new: true }
+    );
     res.json(task);
-
   } catch (error) {
-    console.error('Update error:', {
-      error: error.message,
-      stack: error.stack,
-      taskId: req.params.id
-    });
-    res.status(500).json({ 
-      error: "Server error",
-      reference: `ERR-${Date.now()}`
-    });
+    res.status(404).json({ error: 'Task not found' });
   }
 });
 
-
-
-
-// Add to delete endpoint
-router.delete('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
-  console.log('Delete request:', {
-    taskId: req.params.id,
-    userId: req.user.uid,
-    timestamp: new Date().toISOString()
-  });
-
-  try {
-    const task = await Task.findOneAndDelete({ 
-      _id: new mongoose.Types.ObjectId(req.params.id),
-      userId: req.user.uid 
-    });
-
-    if (!task) {
-      console.warn('Delete failed - Task not found:', {
-        taskId: req.params.id,
-        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
-      });
-      return res.status(404).json({ 
-        error: "Task not found",
-        recovery: "Refresh your task list"
-      });
-    }
-
-    console.log('Delete successful:', task);
-    broadcastUpdate();
-    res.sendStatus(204);
-
-  } catch (error) {
-    console.error('Delete error:', {
-      error: error.message,
-      stack: error.stack,
-      taskId: req.params.id
-    });
-    res.status(500).json({ 
-      error: "Server error during deletion",
-      reference: `DEL-ERR-${Date.now()}`
-    });
-  }
-});
-// Session Endpoints
-// In your server.js routes
+// Focus Session Endpoints
 router.post('/sessions', authenticate, async (req, res) => {
   try {
-    const { action } = req.body;
-    const now = new Date();
-    
-    // Validate and parse duration
-    const duration = parseInt(req.body.duration, 10);
-    if (isNaN(duration) || duration < 300 || duration > 14400) {
-      return res.status(400).json({ error: 'Invalid session duration (5min-4hr)' });
-    }
-
-    let session;
-    switch (action) {
-      case 'start':
-        const endTime = new Date(now.getTime() + duration * 1000);
-        
-        session = new FocusSession({
-          userId: req.user.uid,
-          duration,
-          startTime: now,
-          endTime: endTime
-        });
-        break;
-
-      case 'stop':
-        session = await FocusSession.findOneAndUpdate(
-          { userId: req.user.uid, endTime: { $gt: now } },
-          { endTime: now },
-          { new: true }
-        );
-        break;
-
-      default:
-        return res.status(400).json({ error: 'Invalid session action' });
-    }
-
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    
-    // Validate dates before saving
-    if (isNaN(session.startTime.getTime()) || isNaN(session.endTime.getTime())) {
-      return res.status(400).json({ error: 'Invalid date values' });
-    }
-
+    const session = new FocusSession({
+      userId: req.user.uid,
+      duration: req.body.duration,
+      startTime: new Date(req.body.startTime),
+      endTime: new Date(req.body.endTime)
+    });
     await session.save();
-    broadcastUpdate();
     res.status(201).json(session);
   } catch (error) {
-    console.error('Session error:', error);
-    res.status(400).json({ 
-      error: error.message,
-      details: error.errors 
-    });
+    res.status(400).json({ error: 'Invalid session data' });
   }
 });
-// Stats Endpoint
+
+// Statistics Endpoint
 router.get('/stats', authenticate, async (req, res) => {
   try {
     const [tasksCompleted, focusSessions] = await Promise.all([
@@ -375,18 +209,17 @@ router.get('/stats', authenticate, async (req, res) => {
     ]);
 
     const totalFocus = focusSessions.reduce((acc, session) => acc + session.duration, 0);
-    const currentStreak = calculateStreak(focusSessions);
-
+    
     res.json({
-      tasksCompleted: tasksCompleted || 0,
-      totalFocus: totalFocus || 0,
-      currentStreak: currentStreak || 0
+      tasksCompleted,
+      totalFocus,
+      currentStreak: calculateStreak(focusSessions)
     });
   } catch (error) {
-    console.error('Stats calculation error:', error);
-    res.status(500).json({ error: 'Failed to calculate statistics' });
+    res.status(500).json({ error: 'Failed to load statistics' });
   }
 });
+
 
 app.use('/api/v1', router);
 
