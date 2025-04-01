@@ -210,47 +210,72 @@ const HomePage = () => {
     }
   }, [getToken, newTask, fetchTasks]);
   const toggleTask = useCallback(async (taskId, completed) => {
-    const originalTasks = [...tasks];
+    const originalTasks = tasks;
     
     try {
+      // Validate task ID format
+      if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
+        throw new Error("Invalid task ID format");
+      }
+  
       // Optimistic update
       setTasks(prev => prev.map(task => 
         task._id === taskId ? { ...task, completed: !completed } : task
       ));
   
-      const token = await getToken();
+      // Get fresh token
+      const token = await auth.currentUser.getIdToken(true);
+      
       const { data } = await axios.put(
         `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
         { completed: !completed },
-        { 
-          headers: { 
+        {
+          headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 5000
         }
       );
   
-      // Sync with actual server response
+      // Strict validation of server response
+      if (!data || data._id !== taskId) {
+        throw new Error("Invalid server response");
+      }
+  
+      // Sync with server state
       setTasks(prev => prev.map(task => 
-        task._id === data._id ? data : task
+        task._id === taskId ? { ...task, ...data } : task
       ));
   
     } catch (error) {
-      // Revert on error
+      // Revert UI state
       setTasks(originalTasks);
       
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          'Failed to update task';
-      
+      // Enhanced error diagnostics
+      const errorDetails = {
+        message: error.message,
+        response: error.response?.data,
+        taskId,
+        completed
+      };
+  
+      console.error("Task update failed:", errorDetails);
+  
+      // User-friendly error messages
+      const errorMessage = error.response?.data?.error ||
+                          error.response?.data?.details ||
+                          error.message ||
+                          "Failed to update task";
+  
       toast.error(`Update failed: ${errorMessage}`);
-      
-      if (error.response?.data?.validationErrors) {
-        console.error('Validation errors:', error.response.data.validationErrors);
+  
+      // Special case handling
+      if (error.response?.status === 404) {
+        fetchTasks(); // Refresh task list if task not found
       }
     }
-  }, [getToken, tasks]);
-  
+  }, [getToken, tasks, fetchTasks]);
   const deleteTask = useCallback(async (taskId) => {
     try {
       const token = await getToken();
@@ -469,7 +494,7 @@ const HomePage = () => {
               <label className="text-base sm:text-lg font-medium">Select Duration:</label>
               <select
                 value={sessionDuration}
-                onChange={(e) => setSessionDuration(parseInt(e.target.value))}
+                onChange={(e) => setSessionDuration(Number(e.target.value))}
                 disabled={isRunning}
                 className="p-2 bg-gray-800 border border-gray-600 rounded-md text-white text-sm sm:text-base"
               >

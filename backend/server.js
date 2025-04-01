@@ -207,26 +207,58 @@ router.post('/tasks', authenticate, async (req, res) => {
   }
 });
 
+// Enhanced task update endpoint
 router.put('/tasks/:id', authenticate, async (req, res) => {
   try {
+    // Validate request body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({ error: "No update data provided" });
+    }
+
+    // Find and update task
     const task = await Task.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.uid },
+      { 
+        _id: req.params.id,
+        userId: req.user.uid // Ensure user ownership
+      },
       req.body,
-      { new: true, runValidators: true }
-    ).lean();
-    
-    if (!task) return res.status(404).json({ error: 'Task not found' });
-    
-    // Broadcast update to all WebSocket clients
+      { 
+        new: true,
+        runValidators: true,
+        lean: true 
+      }
+    );
+
+    if (!task) {
+      return res.status(404).json({ 
+        error: "Task not found or unauthorized",
+        taskId: req.params.id,
+        userId: req.user.uid
+      });
+    }
+
+    // Broadcast real-time update
     broadcastUpdate();
     res.json(task);
-    
+
   } catch (error) {
-    console.error('Task update error:', error);
-    res.status(400).json({ 
-      error: error.message,
-      validationErrors: error.errors 
+    console.error("Update error details:", {
+      params: req.params,
+      body: req.body,
+      error: error.message
     });
+
+    // Improved error responses
+    const response = {
+      error: "Task update failed",
+      details: error.message
+    };
+
+    if (error.name === 'ValidationError') {
+      response.validationErrors = error.errors;
+    }
+
+    res.status(400).json(response);
   }
 });
 
@@ -247,19 +279,28 @@ router.delete('/tasks/:id', authenticate, async (req, res) => {
 });
 
 // Session Endpoints
+// In your server.js routes
 router.post('/sessions', authenticate, async (req, res) => {
   try {
-    const { action, duration, timestamp } = req.body;
+    const { action } = req.body;
     const now = new Date();
-    let session;
+    
+    // Validate and parse duration
+    const duration = parseInt(req.body.duration, 10);
+    if (isNaN(duration) || duration < 300 || duration > 14400) {
+      return res.status(400).json({ error: 'Invalid session duration (5min-4hr)' });
+    }
 
+    let session;
     switch (action) {
       case 'start':
+        const endTime = new Date(now.getTime() + duration * 1000);
+        
         session = new FocusSession({
           userId: req.user.uid,
           duration,
           startTime: now,
-          endTime: new Date(now.getTime() + duration * 1000)
+          endTime: endTime
         });
         break;
 
@@ -276,15 +317,23 @@ router.post('/sessions', authenticate, async (req, res) => {
     }
 
     if (!session) return res.status(404).json({ error: 'Session not found' });
+    
+    // Validate dates before saving
+    if (isNaN(session.startTime.getTime()) || isNaN(session.endTime.getTime())) {
+      return res.status(400).json({ error: 'Invalid date values' });
+    }
+
     await session.save();
     broadcastUpdate();
     res.status(201).json(session);
   } catch (error) {
     console.error('Session error:', error);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ 
+      error: error.message,
+      details: error.errors 
+    });
   }
 });
-
 // Stats Endpoint
 router.get('/stats', authenticate, async (req, res) => {
   try {
