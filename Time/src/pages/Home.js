@@ -213,19 +213,29 @@ const HomePage = () => {
   const toggleTask = useCallback(async (taskId, completed) => {
     try {
       const token = await getToken();
-      await axios.put(
-        `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
+      const { data } = await axios.put(
+        `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
         { completed: !completed },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      await fetchTasks();
+  
+      // Update local state with server response
+      setTasks(prev => prev.map(task => 
+        task._id === taskId ? { ...task, ...data } : task
+      ));
+      
       toast.success('Task updated');
     } catch (error) {
-      toast.error('Failed to update task');
-      console.error('Task toggle error:', error);
+      // Show detailed error message from server
+      const errorMessage = error.response?.data?.error || 'Failed to update task';
+      toast.error(errorMessage);
+      
+      // Revert local state on error
+      setTasks(prev => prev.map(task => 
+        task._id === taskId ? { ...task, completed } : task
+      ));
     }
-  }, [getToken, fetchTasks]);
-
+  }, [getToken]);
   const deleteTask = useCallback(async (taskId) => {
     try {
       const token = await getToken();
