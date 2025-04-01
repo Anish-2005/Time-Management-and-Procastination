@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: time-management-backend
+    env: node
+    region: singapore  # or choose another region closer to you
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGODB_URI
+        value: mongodb+srv://anishseth0510:Anish@time.l0nq0ep.mongodb.net/time?retryWrites=true&w=majority&appName=Time
+      - key: FIREBASE_PROJECT_ID
+        value: time-management-e03d7
+      - key: FIREBASE_CLIENT_EMAIL
+        value: firebase-adminsdk-fbsvc@time-management-e03d7.iam.gserviceaccount.com
+      - key: FIREBASE_PRIVATE_KEY
+        value: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDriLI4C+gtb2pv
+          /ktw2u8BRtLfOn56FV1xAFi/cyoNJyJPZBi/NV1yRL69iNyhf3/4PVjvvdVq2llA
+          8Bf7xewpnwNx3/IhG6dPM8hnDmkgPHn0G6hfrCiEd/2CRF6lcyuaKtslQOZ/wKSU
+          4cryM8uqbhn1qKiWDWpL8N0kKLHqGqO0i1clF9RzxKYQ4bsewsnGCQuE4nDFCFbl
+          DGqEzM5qHlqojh1v1zztX9ci7DGPNcZdq9gzTAoIgRBDoe1l/cv0DoIWr8mI6qX9
+          s9rIG85l9yaBDJ1lDvB4u4yp6EDhTnbMLNvxDY+Y6Bf8G27DJPwPj0WiDaqtBvNB
+          YjcjzoBxAgMBAAECggEACLlSW+aUVd3RrAPCe2k0ieV7voZuCatnFQjTALECjqRT
+          g5bHdDTvuOGId2s4EX2a5GYwot1IaByIdUdfUAqbmHVkvS/zCdxlGkx79gCP5BXc
+          Bi63EhIa7xXQVztH49TBTu9wQ1qPybgS2yvbe+nvYijmqmrHPHA97sGlYzyO+HGB
+          dsR0GTCs1gPAiCtAIxyqmujBRKOYQkW9CaYChutAsooIx8CU3PeITv/vR7FePkBA
+          ge9UBoY8c8H7AmTP2KLu+o/gtvHePv6QYKSuYGsaXmdkAtLOyKSyA+GrLOZMHp4p
+          Ins/k11iGDD8PVyPA2mOxEU7k+Mzfz+9Puo4MmDvVQKBgQD3KBCyWfJjB8S0xpvT
+          Laa0PxxtLPEuXNPShENT00SzaN/K9jXM9SuE6fYSF9oVKMO00aSYnvebaMFXRBp6
+          Ghjy7hSCA2tP2YqhqcP3yhN1JLHKtlwuDyHnxOELQzWMtwY8qEdjg2ZwwvpysQkk
+          xtBf1skiTWgGU/9Jpi5E6gbE1QKBgQDz9iteO7BwaKRezZZZl29gSGQvUiXOynX1
+          azZho/WHC9GhIRF1SgCYalF+JE3w4nOkCk0V/YAfSDs+PHYD2uNrr6mOcPGvZ/HU
+          3aEEQ4r+lVc1Swvya9H73z2SeFJlvt/xTcSu7nGYEuc6gvqOQfsJYBpASOuOzbvY
+          QcQeUOXLLQKBgB6LGf0gdn7cf+ejP7CKTLarsfSgADItkJPMepGKY0wUostvP9jT
+          V4x2aU11GyNQRVc8LS4bPxg6iuIg7XC3duvWljw29fUJOkOeOjSOCXeJkFsvzBZ5
+          EkSVJQaCSMTZ/XBTj3bxzyASSGcSD8I2u5uMbJDLphZaHQtZ+Q/VJ/79AoGADvEu
+          6tChF+Fw39WbtdUOn0kPyc4wPqAr5WIxrH1MVn8k0ceiuBpWOv+YCi/TDkPwbUWs
+          PwKNzFyyNDejysynTTsvGWhVhTbKmw0QBaDVbI5dDwiPrMNp0xFzRftUoKK2OKNY
+          vpYgIv5VZ0IKcpgb9hEKypEszExRiwdMKccuq+kCgYB63PLKVYn7vUgNAuPERP5H
+          wEeplE0IptH+cZBQ3BzRUzkfgbFQj0sJg7+cg6+s2/WzuAqLIvL7lXdAVVlg5oQt
+          H+qs0jsq8Us0NCmBRfh7PLO+Fc3Cvm9XBTDGoQ5kRPl/5LQEeUxbrLBDX1ISOCrH
+          WDejoH2J9uC/pXrkUM+dZw==
+          -----END PRIVATE KEY-----
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
