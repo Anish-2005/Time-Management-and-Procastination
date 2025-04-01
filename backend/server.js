@@ -25,7 +25,7 @@ app.use(helmet({
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://your-frontend-domain.com' // Replace with production domain
+    'https://time-management-app-theta.vercel.app/' // Replace with production domain
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
