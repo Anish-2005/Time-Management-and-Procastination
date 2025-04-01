@@ -136,37 +136,48 @@ const HomePage = () => {
       setIsRunning(true);
       setIsPaused(false);
       setTimeLeft(sessionDuration);
-      await handleTimerAction('start');
+  
+      try {
+        const token = await getToken();
+        await axios.post(
+          `${process.env.REACT_APP_API_URL}/sessions`,
+          {
+            startTime: new Date(),
+            duration: sessionDuration,
+            endTime: new Date(Date.now() + sessionDuration * 1000)
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } catch (error) {
+        toast.error('Failed to start session');
+        console.error('Session error:', error);
+      }
     }
-  }, [handleTimerAction, isRunning, sessionDuration]);
-
-  const pauseTimer = useCallback(async () => {
+  }, [isRunning, sessionDuration, getToken]);
+  const pauseTimer = useCallback(() => {
     setIsPaused(!isPaused);
     toast.info(isPaused ? 'Timer resumed' : 'Timer paused');
-    await handleTimerAction(isPaused ? 'resume' : 'pause');
-  }, [handleTimerAction, isPaused]);
+  }, [isPaused]);
 
   const lapTimer = useCallback(() => {
     setLaps(prev => [...prev, formatTime(timeLeft)]);
   }, [timeLeft]);
 
-  const stopTimer = useCallback(async () => {
+  const stopTimer = useCallback(() => {
     setIsRunning(false);
     setIsPaused(false);
     setTimeLeft(sessionDuration);
     setLaps([]);
     toast.warning('Session stopped');
-    await handleTimerAction('stop');
-  }, [handleTimerAction, sessionDuration]);
+  }, [sessionDuration]);
 
-  const resetTimer = useCallback(async () => {
-    setIsRunning(false);
-    setIsPaused(false);
-    setTimeLeft(sessionDuration);
-    setLaps([]);
-    toast.success('Timer reset');
-    await handleTimerAction('reset');
-  }, [handleTimerAction, sessionDuration]);
+  const resetTimer = useCallback(() => {
+  setIsRunning(false);
+  setIsPaused(false);
+  setTimeLeft(sessionDuration);
+  setLaps([]);
+  toast.success('Timer reset');
+}, [sessionDuration]);
 
   useEffect(() => {
     let interval;
@@ -214,96 +225,75 @@ const HomePage = () => {
 
   const toggleTask = useCallback(async (taskId, completed) => {
     try {
-      // Validate task ID format
-      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
-        toast.error("Invalid task format");
-        return;
-      }
-  
-      // Get fresh token
-      const token = await auth.currentUser.getIdToken(true);
-      
-      const { data } = await axios.put(
+      const token = await getToken();
+      await axios.put(
         `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
         { completed: !completed },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 5000
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-  
-      // Update local state only after successful update
-      setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, ...data } : task
-      ));
-  
+      await fetchTasks(); // Refresh task list
+      toast.success('Task updated');
     } catch (error) {
-      console.error("Update error details:", {
-        error: error.response?.data,
-        taskId,
-        status: error.response?.status
-      });
-  
-      if (error.response?.status === 404) {
-        // Refresh tasks if 404 occurs
-        toast.error("Task not found - refreshing list...");
-        await fetchTasks();
-      } else {
-        toast.error(error.response?.data?.error || "Update failed");
-      }
+      toast.error('Failed to update task');
+      console.error('Task toggle error:', error);
     }
-  }, [fetchTasks]);
-
-
+  }, [getToken, fetchTasks]);
+  
   const deleteTask = useCallback(async (taskId) => {
     try {
-      // Validate ID format first
-      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
-        toast.error('Invalid task ID format');
-        return;
-      }
-  
-      const token = await auth.currentUser.getIdToken(true); // Force token refresh
+      const token = await getToken();
       await axios.delete(
         `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
-        { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'X-Request-ID': `delete-${Date.now()}`
-          },
-          timeout: 5000
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-  
-      // Optimistic update instead of refetching
-      setTasks(prev => prev.filter(task => task._id !== taskId));
-      toast.success('Task deleted successfully');
-  
+      await fetchTasks(); // Refresh task list
+      toast.success('Task deleted');
     } catch (error) {
-      console.error('Delete error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        taskId
-      });
-  
-      if (error.response?.status === 404) {
-        await fetchTasks(); // Refresh list if task not found
-        toast.error('Task not found - list refreshed');
-      } else {
-        toast.error(error.response?.data?.error || 'Failed to delete task');
-      }
+      toast.error('Failed to delete task');
+      console.error('Task delete error:', error);
     }
-  }, [fetchTasks]);
+  }, [getToken, fetchTasks]);
+
+  // Remove this useEffect block entirely
+useEffect(() => {
+  const ws = new WebSocket(`wss://${window.location.host}/ws`);
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'DATA_UPDATE') {
+      fetchTasks();
+      fetchStats();
+    }
+  };
+  return () => ws.close();
+}, [fetchTasks, fetchStats]);
 
   const taskVariants = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -20 }
   };
+  const handleDurationChange = (minutes) => {
+    if (isRunning) {
+      toast.error('Cannot change duration during active session');
+      return;
+    }
+    setSessionDuration(minutes * 60); // Convert minutes to seconds
+  };
 
+  useEffect(() => {
+    let interval;
+    if (isRunning && !isPaused && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(time => time - 1);
+      }, 1000);
+    } else if (timeLeft === 0) {
+      setIsRunning(false);
+      toast.success('Focus session completed!');
+      alarmSound.play().catch(console.error);
+      fetchStats();
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, isPaused, timeLeft, alarmSound, fetchStats]);
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
       <nav className="px-4 sm:px-6 py-4 border-b border-gray-700 backdrop-blur-sm bg-gray-900/80">
