@@ -207,61 +207,47 @@ router.post('/tasks', authenticate, async (req, res) => {
   }
 });
 
-// Enhanced task update endpoint
-router.put('/tasks/:id', authenticate, async (req, res) => {
-  try {
-    // Validate request body
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({ error: "No update data provided" });
-    }
+// Add validation middleware
+const validateObjectId = (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ error: "Invalid task ID format" });
+  }
+  next();
+};
 
-    // Find and update task
+router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+  try {
     const task = await Task.findOneAndUpdate(
       { 
         _id: req.params.id,
-        userId: req.user.uid // Ensure user ownership
+        userId: req.user.uid // Verify ownership
       },
       req.body,
       { 
         new: true,
         runValidators: true,
-        lean: true 
+        lean: true
       }
     );
 
     if (!task) {
-      return res.status(404).json({ 
-        error: "Task not found or unauthorized",
+      console.error('Update failed - Task not found:', {
         taskId: req.params.id,
         userId: req.user.uid
       });
+      return res.status(404).json({ 
+        error: "Task not found or unauthorized",
+        suggestion: "Refresh your task list and try again"
+      });
     }
 
-    // Broadcast real-time update
     broadcastUpdate();
     res.json(task);
-
   } catch (error) {
-    console.error("Update error details:", {
-      params: req.params,
-      body: req.body,
-      error: error.message
-    });
-
-    // Improved error responses
-    const response = {
-      error: "Task update failed",
-      details: error.message
-    };
-
-    if (error.name === 'ValidationError') {
-      response.validationErrors = error.errors;
-    }
-
-    res.status(400).json(response);
+    console.error('Update error:', error);
+    res.status(500).json({ error: "Server error during update" });
   }
 });
-
 router.delete('/tasks/:id', authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndDelete({ 

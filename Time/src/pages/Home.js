@@ -209,19 +209,16 @@ const HomePage = () => {
       console.error('Add task error:', error);
     }
   }, [getToken, newTask, fetchTasks]);
+
+
+
   const toggleTask = useCallback(async (taskId, completed) => {
-    const originalTasks = tasks;
-    
     try {
       // Validate task ID format
-      if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-        throw new Error("Invalid task ID format");
+      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
+        toast.error("Invalid task format");
+        return;
       }
-  
-      // Optimistic update
-      setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, completed: !completed } : task
-      ));
   
       // Get fresh token
       const token = await auth.currentUser.getIdToken(true);
@@ -238,44 +235,29 @@ const HomePage = () => {
         }
       );
   
-      // Strict validation of server response
-      if (!data || data._id !== taskId) {
-        throw new Error("Invalid server response");
-      }
-  
-      // Sync with server state
+      // Update local state only after successful update
       setTasks(prev => prev.map(task => 
         task._id === taskId ? { ...task, ...data } : task
       ));
   
     } catch (error) {
-      // Revert UI state
-      setTasks(originalTasks);
-      
-      // Enhanced error diagnostics
-      const errorDetails = {
-        message: error.message,
-        response: error.response?.data,
+      console.error("Update error details:", {
+        error: error.response?.data,
         taskId,
-        completed
-      };
+        status: error.response?.status
+      });
   
-      console.error("Task update failed:", errorDetails);
-  
-      // User-friendly error messages
-      const errorMessage = error.response?.data?.error ||
-                          error.response?.data?.details ||
-                          error.message ||
-                          "Failed to update task";
-  
-      toast.error(`Update failed: ${errorMessage}`);
-  
-      // Special case handling
       if (error.response?.status === 404) {
-        fetchTasks(); // Refresh task list if task not found
+        // Refresh tasks if 404 occurs
+        toast.error("Task not found - refreshing list...");
+        await fetchTasks();
+      } else {
+        toast.error(error.response?.data?.error || "Update failed");
       }
     }
-  }, [getToken, tasks, fetchTasks]);
+  }, [fetchTasks]);
+
+
   const deleteTask = useCallback(async (taskId) => {
     try {
       const token = await getToken();
