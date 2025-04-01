@@ -215,39 +215,60 @@ const validateObjectId = (req, res, next) => {
   next();
 };
 
+// Add detailed logging middleware
 router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+  console.log('Update request:', {
+    taskId: req.params.id,
+    userId: req.user.uid,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const task = await Task.findOneAndUpdate(
       { 
-        _id: req.params.id,
-        userId: req.user.uid // Verify ownership
+        _id: new mongoose.Types.ObjectId(req.params.id),
+        userId: req.user.uid 
       },
       req.body,
       { 
         new: true,
         runValidators: true,
-        lean: true
+        projection: { __v: 0 } // Exclude version key
       }
-    );
+    ).lean();
 
     if (!task) {
-      console.error('Update failed - Task not found:', {
+      console.warn('Task not found:', {
         taskId: req.params.id,
-        userId: req.user.uid
+        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
       });
       return res.status(404).json({ 
-        error: "Task not found or unauthorized",
-        suggestion: "Refresh your task list and try again"
+        error: "Task not found",
+        recovery: "Please refresh your task list"
       });
     }
 
+    console.log('Update successful:', task);
     broadcastUpdate();
     res.json(task);
+
   } catch (error) {
-    console.error('Update error:', error);
-    res.status(500).json({ error: "Server error during update" });
+    console.error('Update error:', {
+      error: error.message,
+      stack: error.stack,
+      taskId: req.params.id
+    });
+    res.status(500).json({ 
+      error: "Server error",
+      reference: `ERR-${Date.now()}`
+    });
   }
 });
+
+
+
+
 router.delete('/tasks/:id', authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndDelete({ 
