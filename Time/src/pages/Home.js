@@ -209,33 +209,48 @@ const HomePage = () => {
       console.error('Add task error:', error);
     }
   }, [getToken, newTask, fetchTasks]);
-
   const toggleTask = useCallback(async (taskId, completed) => {
+    const originalTasks = [...tasks];
+    
     try {
+      // Optimistic update
+      setTasks(prev => prev.map(task => 
+        task._id === taskId ? { ...task, completed: !completed } : task
+      ));
+  
       const token = await getToken();
       const { data } = await axios.put(
         `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
         { completed: !completed },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
   
-      // Update local state with server response
+      // Sync with actual server response
       setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, ...data } : task
+        task._id === data._id ? data : task
       ));
-      
-      toast.success('Task updated');
+  
     } catch (error) {
-      // Show detailed error message from server
-      const errorMessage = error.response?.data?.error || 'Failed to update task';
-      toast.error(errorMessage);
+      // Revert on error
+      setTasks(originalTasks);
       
-      // Revert local state on error
-      setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, completed } : task
-      ));
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to update task';
+      
+      toast.error(`Update failed: ${errorMessage}`);
+      
+      if (error.response?.data?.validationErrors) {
+        console.error('Validation errors:', error.response.data.validationErrors);
+      }
     }
-  }, [getToken]);
+  }, [getToken, tasks]);
+  
   const deleteTask = useCallback(async (taskId) => {
     try {
       const token = await getToken();

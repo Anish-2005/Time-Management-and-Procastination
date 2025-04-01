@@ -213,14 +213,20 @@ router.put('/tasks/:id', authenticate, async (req, res) => {
       { _id: req.params.id, userId: req.user.uid },
       req.body,
       { new: true, runValidators: true }
-    );
+    ).lean();
     
     if (!task) return res.status(404).json({ error: 'Task not found' });
+    
+    // Broadcast update to all WebSocket clients
     broadcastUpdate();
     res.json(task);
+    
   } catch (error) {
     console.error('Task update error:', error);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ 
+      error: error.message,
+      validationErrors: error.errors 
+    });
   }
 });
 
