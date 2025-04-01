@@ -227,8 +227,6 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndUpdate(
       { 
-        _id: req.params.id,
-        userId: req.user.uid // Verify ownership
         _id: new mongoose.Types.ObjectId(req.params.id),
         userId: req.user.uid 
       },
@@ -236,22 +234,16 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
       { 
         new: true,
         runValidators: true,
-        lean: true
         projection: { __v: 0 } // Exclude version key
       }
-    );
     ).lean();
 
     if (!task) {
-      console.error('Update failed - Task not found:', {
       console.warn('Task not found:', {
         taskId: req.params.id,
-        userId: req.user.uid
         existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
       });
       return res.status(404).json({ 
-        error: "Task not found or unauthorized",
-        suggestion: "Refresh your task list and try again"
         error: "Task not found",
         recovery: "Please refresh your task list"
       });
@@ -262,8 +254,6 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
     res.json(task);
 
   } catch (error) {
-    console.error('Update error:', error);
-    res.status(500).json({ error: "Server error during update" });
     console.error('Update error:', {
       error: error.message,
       stack: error.stack,
@@ -279,22 +269,47 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
 
 
 
-router.delete('/tasks/:id', authenticate, async (req, res) => {
+// Add to delete endpoint
+router.delete('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+  console.log('Delete request:', {
+    taskId: req.params.id,
+    userId: req.user.uid,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const task = await Task.findOneAndDelete({ 
-      _id: req.params.id, 
+      _id: new mongoose.Types.ObjectId(req.params.id),
       userId: req.user.uid 
     });
-    
-    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    if (!task) {
+      console.warn('Delete failed - Task not found:', {
+        taskId: req.params.id,
+        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
+      });
+      return res.status(404).json({ 
+        error: "Task not found",
+        recovery: "Refresh your task list"
+      });
+    }
+
+    console.log('Delete successful:', task);
     broadcastUpdate();
     res.sendStatus(204);
+
   } catch (error) {
-    console.error('Task deletion error:', error);
-    res.status(500).json({ error: 'Failed to delete task' });
+    console.error('Delete error:', {
+      error: error.message,
+      stack: error.stack,
+      taskId: req.params.id
+    });
+    res.status(500).json({ 
+      error: "Server error during deletion",
+      reference: `DEL-ERR-${Date.now()}`
+    });
   }
 });
-
 // Session Endpoints
 // In your server.js routes
 router.post('/sessions', authenticate, async (req, res) => {
