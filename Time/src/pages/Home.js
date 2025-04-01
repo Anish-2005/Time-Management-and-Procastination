@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { auth } from '../firebase';
 import { FaSignOutAlt, FaTasks, FaChartPie, FaClock, FaCalendarDay, FaPlus, FaTrash } from 'react-icons/fa';
@@ -11,10 +11,10 @@ const HomePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState('');
-  const [sessionDuration, setSessionDuration] = useState(25); // Default: 25 minutes
-  const [timeLeft, setTimeLeft] = useState(1500);
+  const [sessionDuration, setSessionDuration] = useState(1500); // Default: 25 minutes
+  const [timeLeft, setTimeLeft] = useState(sessionDuration);
   const [laps, setLaps] = useState([]);
-const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState({ 
     tasksCompleted: 0, 
@@ -27,54 +27,168 @@ const [isPaused, setIsPaused] = useState(false);
     session: false
   });
 
-  // Get Firebase token for API calls
-  const getToken = async () => {
+  // Memoized API call functions
+  const getToken = useCallback(async () => {
     return auth.currentUser?.getIdToken();
-  };
+  }, []);
 
-  // Fetch tasks with error handling
-  const fetchTasks = async () => {
+  // Enhanced fetch functions with abort controller
+  const fetchTasks = useCallback(async () => {
+    const controller = new AbortController();
     try {
       setLoading(prev => ({ ...prev, tasks: true }));
       const token = await getToken();
       const { data } = await axios.get(
         `${process.env.REACT_APP_API_URL}/tasks`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal 
+        }
       );
       setTasks(data);
     } catch (error) {
-      toast.error('Failed to load tasks');
-      console.error('Task fetch error:', error);
+      if (!axios.isCancel(error)) {
+        toast.error('Failed to load tasks');
+        console.error('Task fetch error:', error);
+      }
     } finally {
       setLoading(prev => ({ ...prev, tasks: false }));
     }
-  };
+    return () => controller.abort();
+  }, [getToken]);
 
-  // Fetch statistics
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
+    const controller = new AbortController();
     try {
       setLoading(prev => ({ ...prev, stats: true }));
       const token = await getToken();
       const { data } = await axios.get(
         `${process.env.REACT_APP_API_URL}/stats`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal 
+        }
       );
-      setStats(data);
+      setStats({
+        tasksCompleted: data.tasksCompleted || 0,
+        totalFocus: data.totalFocus || 0,
+        currentStreak: data.currentStreak || 0
+      });
     } catch (error) {
-      toast.error('Failed to load statistics');
-      console.error('Stats fetch error:', error);
+      if (!axios.isCancel(error)) {
+        toast.error('Failed to load statistics');
+        console.error('Stats fetch error:', error);
+      }
     } finally {
       setLoading(prev => ({ ...prev, stats: false }));
     }
-  };
+    return () => controller.abort();
+  }, [getToken]);
 
+  // Real-time updates with WebSocket
+  useEffect(() => {
+    const ws = new WebSocket(`wss://${window.location.host}/ws`);
+    
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'DATA_UPDATE') {
+        fetchTasks();
+        fetchStats();
+      }
+    };
+
+    return () => ws.close();
+  }, [fetchTasks, fetchStats]);
+
+  // Data fetching effects
   useEffect(() => {
     if (activeTab === 'tasks') fetchTasks();
     fetchStats();
-  }, [activeTab]);
+  }, [activeTab, fetchTasks, fetchStats]);
+
+  // Timer functionality
+  const alarmSound = new Audio('/alarm.mp3');
+
+  const handleTimerAction = useCallback(async (action) => {
+    try {
+      const token = await getToken();
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/sessions`,
+        {
+          action,
+          duration: sessionDuration,
+          timestamp: new Date().toISOString()
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      toast.error(`Failed to ${action} session`);
+      console.error('Session error:', error);
+    }
+  }, [getToken, sessionDuration]);
+
+  const startTimer = useCallback(async () => {
+    if (!isRunning) {
+      setIsRunning(true);
+      setIsPaused(false);
+      setTimeLeft(sessionDuration);
+      await handleTimerAction('start');
+    }
+  }, [handleTimerAction, isRunning, sessionDuration]);
+
+  const pauseTimer = useCallback(async () => {
+    setIsPaused(!isPaused);
+    toast.info(isPaused ? 'Timer resumed' : 'Timer paused');
+    await handleTimerAction(isPaused ? 'resume' : 'pause');
+  }, [handleTimerAction, isPaused]);
+
+  const lapTimer = useCallback(() => {
+    setLaps(prev => [...prev, formatTime(timeLeft)]);
+  }, [timeLeft]);
+
+  const stopTimer = useCallback(async () => {
+    setIsRunning(false);
+    setIsPaused(false);
+    setTimeLeft(sessionDuration);
+    setLaps([]);
+    toast.warning('Session stopped');
+    await handleTimerAction('stop');
+  }, [handleTimerAction, sessionDuration]);
+
+  const resetTimer = useCallback(async () => {
+    setIsRunning(false);
+    setIsPaused(false);
+    setTimeLeft(sessionDuration);
+    setLaps([]);
+    toast.success('Timer reset');
+    await handleTimerAction('reset');
+  }, [handleTimerAction, sessionDuration]);
+
+  // Timer effect
+  useEffect(() => {
+    let interval;
+    if (isRunning && !isPaused && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(time => time - 1);
+      }, 1000);
+    } else if (timeLeft === 0) {
+      setIsRunning(false);
+      toast.success('Focus session completed!');
+      alarmSound.play().catch(console.error);
+      fetchStats();
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, isPaused, timeLeft, alarmSound, fetchStats]);
+
+  // Format time display
+  const formatTime = useCallback((seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, []);
 
   // Task functions
-  const addTask = async () => {
+  const addTask = useCallback(async () => {
     if (!newTask.trim()) {
       toast.error('Task cannot be empty');
       return;
@@ -94,9 +208,9 @@ const [isPaused, setIsPaused] = useState(false);
       toast.error('Failed to add task');
       console.error('Add task error:', error);
     }
-  };
+  }, [getToken, newTask, fetchTasks]);
 
-  const toggleTask = async (taskId, completed) => {
+  const toggleTask = useCallback(async (taskId, completed) => {
     try {
       const token = await getToken();
       await axios.put(
@@ -110,9 +224,9 @@ const [isPaused, setIsPaused] = useState(false);
       toast.error('Failed to update task');
       console.error('Task toggle error:', error);
     }
-  };
+  }, [getToken, fetchTasks]);
 
-  const deleteTask = async (taskId) => {
+  const deleteTask = useCallback(async (taskId) => {
     try {
       const token = await getToken();
       await axios.delete(
@@ -125,84 +239,7 @@ const [isPaused, setIsPaused] = useState(false);
       toast.error('Failed to delete task');
       console.error('Task delete error:', error);
     }
-  };
-
-  const alarmSound = new Audio('/alarm.mp3'); // Path to public/alarm.mp3
-
-  const startTimer = async () => {
-    if (!isRunning) {
-      setIsRunning(true);
-      setIsPaused(false);
-      setTimeLeft(sessionDuration);
-  
-      try {
-        const token = await getToken();
-        await axios.post(
-          `${process.env.REACT_APP_API_URL}/sessions`,
-          {
-            startTime: new Date(),
-            duration: sessionDuration,
-            endTime: new Date(Date.now() + sessionDuration * 1000)
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      } catch (error) {
-        toast.error('Failed to start session');
-        console.error('Session error:', error);
-      }
-    }
-  };
-  
-  const pauseTimer = () => {
-    setIsPaused(!isPaused);
-    toast.info(isPaused ? 'Timer resumed' : 'Timer paused');
-  };
-  
-  const lapTimer = () => {
-    setLaps([...laps, formatTime(timeLeft)]);
-  };
-  
-  const stopTimer = () => {
-    setIsRunning(false);
-    setIsPaused(false);
-    setTimeLeft(sessionDuration);
-    setLaps([]);
-    toast.warning('Session stopped');
-  };
-  
-  const resetTimer = () => {
-    setIsRunning(false);
-    setIsPaused(false);
-    setTimeLeft(sessionDuration);
-    setLaps([]);
-    toast.success('Timer reset');
-  };
-  
-  useEffect(() => {
-    let interval;
-    if (isRunning && !isPaused && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((time) => time - 1);
-      }, 1000);
-    } else if (timeLeft === 0) {
-      setIsRunning(false);
-      toast.success('Focus session completed!');
-      
-      // 🔊 Play alarm sound when time reaches zero
-      alarmSound.play().catch(error => console.error("Audio play failed:", error));
-  
-      fetchStats();
-    }
-    return () => clearInterval(interval);
-  }, [isRunning, isPaused, timeLeft]);
-  
-  // Format time display
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-  
+  }, [getToken, fetchTasks]);
 
   // Animation variants
   const taskVariants = {
@@ -210,7 +247,6 @@ const [isPaused, setIsPaused] = useState(false);
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -20 }
   };
-
   return (
     <div className="flex-row min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
       {/* Navigation */}
