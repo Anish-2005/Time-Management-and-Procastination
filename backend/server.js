@@ -269,22 +269,47 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
 
 
 
-router.delete('/tasks/:id', authenticate, async (req, res) => {
+// Add to delete endpoint
+router.delete('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+  console.log('Delete request:', {
+    taskId: req.params.id,
+    userId: req.user.uid,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const task = await Task.findOneAndDelete({ 
-      _id: req.params.id, 
+      _id: new mongoose.Types.ObjectId(req.params.id),
       userId: req.user.uid 
     });
-    
-    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    if (!task) {
+      console.warn('Delete failed - Task not found:', {
+        taskId: req.params.id,
+        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
+      });
+      return res.status(404).json({ 
+        error: "Task not found",
+        recovery: "Refresh your task list"
+      });
+    }
+
+    console.log('Delete successful:', task);
     broadcastUpdate();
     res.sendStatus(204);
+
   } catch (error) {
-    console.error('Task deletion error:', error);
-    res.status(500).json({ error: 'Failed to delete task' });
+    console.error('Delete error:', {
+      error: error.message,
+      stack: error.stack,
+      taskId: req.params.id
+    });
+    res.status(500).json({ 
+      error: "Server error during deletion",
+      reference: `DEL-ERR-${Date.now()}`
+    });
   }
 });
-
 // Session Endpoints
 // In your server.js routes
 router.post('/sessions', authenticate, async (req, res) => {

@@ -224,7 +224,7 @@ const HomePage = () => {
       const token = await auth.currentUser.getIdToken(true);
       
       const { data } = await axios.put(
-        `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
+        `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
         { completed: !completed },
         {
           headers: {
@@ -260,18 +260,43 @@ const HomePage = () => {
 
   const deleteTask = useCallback(async (taskId) => {
     try {
-      const token = await getToken();
+      // Validate ID format first
+      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
+        toast.error('Invalid task ID format');
+        return;
+      }
+  
+      const token = await auth.currentUser.getIdToken(true); // Force token refresh
       await axios.delete(
         `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'X-Request-ID': `delete-${Date.now()}`
+          },
+          timeout: 5000
+        }
       );
-      await fetchTasks();
-      toast.success('Task deleted');
+  
+      // Optimistic update instead of refetching
+      setTasks(prev => prev.filter(task => task._id !== taskId));
+      toast.success('Task deleted successfully');
+  
     } catch (error) {
-      toast.error('Failed to delete task');
-      console.error('Task delete error:', error);
+      console.error('Delete error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        taskId
+      });
+  
+      if (error.response?.status === 404) {
+        await fetchTasks(); // Refresh list if task not found
+        toast.error('Task not found - list refreshed');
+      } else {
+        toast.error(error.response?.data?.error || 'Failed to delete task');
+      }
     }
-  }, [getToken, fetchTasks]);
+  }, [fetchTasks]);
 
   const taskVariants = {
     initial: { opacity: 0, y: 20 },
