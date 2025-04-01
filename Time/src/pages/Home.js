@@ -294,6 +294,7 @@ useEffect(() => {
     }
     return () => clearInterval(interval);
   }, [isRunning, isPaused, timeLeft, alarmSound, fetchStats]);
+  
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
       <nav className="px-4 sm:px-6 py-4 border-b border-gray-700 backdrop-blur-sm bg-gray-900/80">
