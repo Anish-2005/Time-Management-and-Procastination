@@ -48,24 +48,17 @@ const HomePage = () => {
       setLoading(prev => ({ ...prev, tasks: true }));
       const token = await getToken();
       const { data } = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/v1/tasks`,
+        `${process.env.REACT_APP_API_URL}/tasks`,
         { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Cache-Control': 'no-cache'
-          },
-          signal: controller.signal,
-          params: { t: Date.now() } // Cache buster
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal 
         }
       );
       setTasks(data);
     } catch (error) {
       if (!axios.isCancel(error)) {
-        console.error('Task fetch error:', {
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        toast.error(error.response?.data?.error || 'Failed to refresh tasks');
+        toast.error('Failed to load tasks');
+        console.error('Task fetch error:', error);
       }
     } finally {
       setLoading(prev => ({ ...prev, tasks: false }));
@@ -220,61 +213,49 @@ const HomePage = () => {
 
 
   const toggleTask = useCallback(async (taskId, completed) => {
-    if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-      toast.error('Invalid task identifier');
-      return;
-    }
-  
-    const originalTasks = tasks;
     try {
-      // Optimistic update with rollback tracking
-      setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, _optimistic: true, completed: !completed } : task
-      ));
+      // Validate task ID format
+      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
+        toast.error("Invalid task format");
+        return;
+      }
   
+      // Get fresh token
       const token = await auth.currentUser.getIdToken(true);
+      
       const { data } = await axios.put(
         `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
         { completed: !completed },
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            'X-Request-ID': `task-${taskId}-${Date.now()}`
+            'Content-Type': 'application/json'
           },
-          timeout: 10000
+          timeout: 5000
         }
       );
   
-      // Validate server response
-      if (!data || data._id !== taskId) {
-        throw new Error('Invalid server response');
-      }
-  
-      // Update with server data
+      // Update local state only after successful update
       setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...data, _optimistic: undefined } : task
+        task._id === taskId ? { ...task, ...data } : task
       ));
   
     } catch (error) {
-      console.error('Update failure:', {
-        taskId,
+      console.error("Update error details:", {
         error: error.response?.data,
-        network: navigator.connection
+        taskId,
+        status: error.response?.status
       });
   
-      // Restore original state
-      setTasks(originalTasks);
-  
       if (error.response?.status === 404) {
-        toast.dismiss();
-        toast.info('Refreshing tasks...', { autoClose: 2000 });
+        // Refresh tasks if 404 occurs
+        toast.error("Task not found - refreshing list...");
         await fetchTasks();
-        toast.error('Task not found - please try again');
       } else {
-        toast.error(error.response?.data?.error || 'Update failed');
+        toast.error(error.response?.data?.error || "Update failed");
       }
     }
-  }, [tasks, fetchTasks, getToken]);
+  }, [fetchTasks]);
 
 
   const deleteTask = useCallback(async (taskId) => {
