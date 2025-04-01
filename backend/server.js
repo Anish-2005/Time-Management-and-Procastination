@@ -25,7 +25,7 @@ app.use(helmet({
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://time-management-app-theta.vercel.app' // Replace with production domain
+    'https://time-management-app-theta.vercel.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
@@ -52,38 +52,27 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
-// Firebase Admin Initialization
-// Before
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  }),
-});
-
-// After (Add error handling)
+// Firebase Admin Initialization with enhanced error handling
 try {
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     }),
   });
   console.log('Firebase Admin initialized successfully');
 } catch (error) {
-  console.error('Firebase Admin initialization error:', error);
+  console.error('Firebase Admin initialization failed:', error);
   process.exit(1);
 }
-// MongoDB Connection with Retry
+
+// MongoDB Connection with modern settings
 const connectWithRetry = () => {
   mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    retryWrites: true,
     serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000
+    socketTimeoutMS: 45000,
+    retryWrites: true
   })
   .then(() => console.log('MongoDB connected successfully'))
   .catch(err => {
@@ -91,6 +80,15 @@ const connectWithRetry = () => {
     setTimeout(connectWithRetry, 5000);
   });
 };
+
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB connection active');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
 connectWithRetry();
 
 // Database Models
@@ -109,35 +107,48 @@ const FocusSession = mongoose.model('FocusSession', new mongoose.Schema({
   endTime: { type: Date, required: true }
 }));
 
-// Authentication Middleware
+// Enhanced Authentication Middleware
 const authenticate = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Authorization required' });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Authorization header missing' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Bearer token missing' });
+    }
 
     const decoded = await admin.auth().verifyIdToken(token);
     req.user = decoded;
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
-    res.status(401).json({ error: 'Invalid token' });
+    console.error('Authentication error:', error.message);
+    res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
 // API Routes
 const router = express.Router();
 
-// Health Check
+// Enhanced Health Check
 router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date() });
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.status(200).json({
+    status: 'ok',
+    database: dbStatus,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Task Endpoints
 router.get('/tasks', authenticate, async (req, res) => {
   try {
-    const tasks = await Task.find({ userId: req.user.uid });
+    const tasks = await Task.find({ userId: req.user.uid }).lean();
     res.json(tasks);
   } catch (error) {
+    console.error('Tasks fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
@@ -146,12 +157,14 @@ router.post('/tasks', authenticate, async (req, res) => {
   try {
     const task = new Task({
       userId: req.user.uid,
-      text: req.body.text,
+      ...req.body,
       dueDate: req.body.dueDate || new Date()
     });
+    
     await task.save();
     res.status(201).json(task);
   } catch (error) {
+    console.error('Task creation error:', error);
     res.status(400).json({ error: 'Invalid task data' });
   }
 });
@@ -161,23 +174,47 @@ router.post('/sessions', authenticate, async (req, res) => {
   try {
     const session = new FocusSession({
       userId: req.user.uid,
-      duration: req.body.duration,
+      ...req.body,
       startTime: new Date(req.body.startTime),
       endTime: new Date(req.body.endTime)
     });
+
     await session.save();
     res.status(201).json(session);
   } catch (error) {
+    console.error('Session creation error:', error);
     res.status(400).json({ error: 'Invalid session data' });
+  }
+});
+
+// Enhanced Stats Endpoint
+router.get('/stats', authenticate, async (req, res) => {
+  try {
+    const [tasksCompleted, focusSessions] = await Promise.all([
+      Task.countDocuments({ userId: req.user.uid, completed: true }),
+      FocusSession.find({ userId: req.user.uid })
+    ]);
+
+    const totalFocus = focusSessions.reduce((acc, session) => acc + session.duration, 0);
+    const currentStreak = calculateStreak(focusSessions);
+
+    res.json({
+      tasksCompleted: tasksCompleted || 0,
+      totalFocus: totalFocus || 0,
+      currentStreak: currentStreak || 0
+    });
+  } catch (error) {
+    console.error('Stats calculation error:', error);
+    res.status(500).json({ error: 'Failed to calculate statistics' });
   }
 });
 
 // Apply routes
 app.use('/api/v1', router);
 
-// Error Handling
+// Error Handling Middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Server error:', err.stack);
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -188,7 +225,7 @@ if (isProduction) {
 
 // Process Handlers
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'Reason:', reason);
 });
 
 process.on('uncaughtException', (error) => {
@@ -196,7 +233,33 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+// Streak Calculation Helper
+function calculateStreak(sessions) {
+  if (!sessions.length) return 0;
+  
+  const sortedDates = sessions
+    .map(s => s.endTime)
+    .sort((a, b) => b - a)
+    .map(d => d.toISOString().split('T')[0]);
+
+  let streak = 0;
+  let currentDate = new Date();
+  
+  while (true) {
+    const dateString = currentDate.toISOString().split('T')[0];
+    if (sortedDates.includes(dateString)) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  
+  return streak;
+}
+
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => 
-  console.log(`Server running on port ${PORT} in ${isProduction ? 'production' : 'development'} mode`)
-);
+app.listen(PORT, () => {
+  console.log(`Server running in ${isProduction ? 'production' : 'development'} mode on port ${PORT}`);
+  console.log(`Database: ${process.env.MONGODB_URI.split('@')[1].split('/')[0]}`);
+});
