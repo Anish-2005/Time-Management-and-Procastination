@@ -5,22 +5,48 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Enhanced Security Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"]
+    }
+  }
+}));
+
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'https://your-frontend-domain.com' // Replace with production domain
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
+
 app.use(express.json());
+app.use(compression());
+
+// Security Headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.removeHeader('X-Powered-By');
+  next();
+});
 
 // Rate Limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: isProduction ? 200 : 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -35,14 +61,22 @@ admin.initializeApp({
   }),
 });
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  retryWrites: true,
-})
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+// MongoDB Connection with Retry
+const connectWithRetry = () => {
+  mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    retryWrites: true,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000
+  })
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    setTimeout(connectWithRetry, 5000);
+  });
+};
+connectWithRetry();
 
 // Database Models
 const Task = mongoose.model('Task', new mongoose.Schema({
@@ -78,6 +112,11 @@ const authenticate = async (req, res, next) => {
 // API Routes
 const router = express.Router();
 
+// Health Check
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
 // Task Endpoints
 router.get('/tasks', authenticate, async (req, res) => {
   try {
@@ -102,19 +141,6 @@ router.post('/tasks', authenticate, async (req, res) => {
   }
 });
 
-router.put('/tasks/:id', authenticate, async (req, res) => {
-  try {
-    const task = await Task.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.uid },
-      { completed: req.body.completed },
-      { new: true }
-    );
-    res.json(task);
-  } catch (error) {
-    res.status(404).json({ error: 'Task not found' });
-  }
-});
-
 // Focus Session Endpoints
 router.post('/sessions', authenticate, async (req, res) => {
   try {
@@ -131,42 +157,31 @@ router.post('/sessions', authenticate, async (req, res) => {
   }
 });
 
-// Statistics Endpoint
-router.get('/stats', authenticate, async (req, res) => {
-  try {
-    const [tasksCompleted, focusSessions] = await Promise.all([
-      Task.countDocuments({ userId: req.user.uid, completed: true }),
-      FocusSession.find({ userId: req.user.uid })
-    ]);
-
-    const totalFocus = focusSessions.reduce((acc, session) => acc + session.duration, 0);
-    
-    res.json({
-      tasksCompleted,
-      totalFocus,
-      currentStreak: calculateStreak(focusSessions)
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to load statistics' });
-  }
-});
-
 // Apply routes
 app.use('/api/v1', router);
 
-// Error Handling Middleware
+// Error Handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Production Configuration
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
+// Process Handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => 
-  console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`)
+  console.log(`Server running on port ${PORT} in ${isProduction ? 'production' : 'development'} mode`)
 );
-
-// Helper function for streak calculation
-function calculateStreak(sessions) {
-  // Implement your streak logic here
-  return 3; // Temporary placeholder
-}
