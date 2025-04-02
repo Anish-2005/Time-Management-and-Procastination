@@ -7,7 +7,6 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const WebSocket = require('ws');
-const uniqueValidator = require('mongoose-unique-validator');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -112,7 +111,6 @@ const TaskSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-TaskSchema.plugin(uniqueValidator);
 TaskSchema.index({ userId: 1, completed: 1 });
 TaskSchema.index({ dueDate: 1 });
 const Task = mongoose.model('Task', TaskSchema);
