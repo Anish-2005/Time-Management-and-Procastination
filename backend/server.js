@@ -27,7 +27,8 @@ app.use(helmet({
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://time-management-app-theta.vercel.app'
+    'https://time-management-app-theta.vercel.app',
+    'https://time-management-9tt0kg7hh-anish-seths-projects.vercel.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
