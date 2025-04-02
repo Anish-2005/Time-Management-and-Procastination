@@ -4,9 +4,15 @@ import { auth } from '../firebase';
 import { FaSignOutAlt, FaTasks, FaChartPie, FaClock, FaCalendarDay, FaPlus, FaTrash, FaBars } from 'react-icons/fa';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { FaBell } from 'react-icons/fa';
+import { FaLightbulb } from 'react-icons/fa';
+import RemindersManager from './components/RemindersManager';
 import 'react-toastify/dist/ReactToastify.css';
 import { motion, AnimatePresence } from 'framer-motion';
-
+import Dashboard from './components/Dashboard';
+import TaskManager from './components/TaskManager';
+import PomodoroTimer from './components/PomodoroTimer';
+import Solutions from './components/Solutions';
 const HomePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
@@ -294,6 +300,12 @@ const HomePage = () => {
                 <FaChartPie className="w-5 h-5" /> Dashboard
               </button>
               <button 
+                onClick={() => setActiveTab('solutions')}
+                className={`flex items-center gap-2 ${activeTab === 'solutions' ? 'text-purple-400' : 'text-gray-300 hover:text-purple-300'} transition-colors`}
+              >
+                <FaLightbulb className="w-5 h-5" /> Solutions
+              </button>
+              <button 
                 onClick={() => setActiveTab('tasks')}
                 className={`flex items-center gap-2 ${activeTab === 'tasks' ? 'text-purple-400' : 'text-gray-300 hover:text-purple-300'} transition-colors`}
               >
@@ -305,6 +317,14 @@ const HomePage = () => {
               >
                 <FaClock className="w-5 h-5" /> Pomodoro
               </button>
+              <button 
+                onClick={() => setActiveTab('reminders')}
+                className={`flex items-center gap-2 ${activeTab === 'reminders' ? 'text-purple-400' : 'text-gray-300 hover:text-purple-300'} transition-colors`}
+              >
+                <FaBell className="w-5 h-5" /> Reminders
+              </button>
+          
+
             </div>
           </div>
 
@@ -340,6 +360,12 @@ const HomePage = () => {
                 <FaChartPie className="w-5 h-5" /> Dashboard
               </button>
               <button 
+                onClick={() => { setActiveTab('solutions'); setShowMobileMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2"
+                              >
+                <FaLightbulb className="w-5 h-5" /> Solutions
+              </button>
+              <button 
                 onClick={() => { setActiveTab('tasks'); setShowMobileMenu(false); }}
                 className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2"
               >
@@ -351,200 +377,59 @@ const HomePage = () => {
               >
                 <FaClock className="w-5 h-5" /> Pomodoro
               </button>
+              <button 
+                onClick={() => {setActiveTab('reminders');setShowMobileMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2">
+                <FaBell className="w-5 h-5" /> Reminders
+              </button>
+
             </motion.div>
+            
           )}
         </AnimatePresence>
       </nav>
 
       <main className="flex-grow max-w-6xl mx-auto py-6 px-4 sm:px-6">
         {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
-           <div className="p-6 md:p-8 bg-gray-700/30 rounded-xl backdrop-blur-sm border border-gray-600">
-            <h2 className="text-2xl md:text-3xl font-semibold mb-6">Today's Overview</h2>
-            <div className="h-64 md:h-80 bg-gray-800/50 rounded-lg flex items-center justify-center">
-              {loading.stats ? (
-                <div className="animate-pulse text-gray-400">Loading chart...</div>
-              ) : (
-                <div className="text-center">
-                  <div className="text-4xl md:text-5xl font-bold text-purple-400">
-                    {Math.floor(stats.totalFocus / 3600)}h
-                  </div>
-                  <div className="text-gray-300 mt-2 md:text-lg">Total Focus Today</div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="p-6 md:p-8 bg-gray-700/30 rounded-xl backdrop-blur-sm border border-gray-600">
-            <h2 className="text-2xl md:text-3xl font-semibold mb-6">Quick Actions</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-              <button 
-                onClick={() => setActiveTab('tasks')}
-                className="p-4 md:p-6 bg-purple-600/30 hover:bg-purple-700/30 rounded-xl transition-all flex items-center justify-center gap-2 text-lg md:text-xl"
-              >
-                <FaPlus className="w-6 h-6" /> Add Task
-              </button>
-              <button 
-                onClick={() => setActiveTab('pomodoro')}
-                className="p-4 md:p-6 bg-purple-600/30 hover:bg-purple-700/30 rounded-xl transition-all flex items-center justify-center gap-2 text-lg md:text-xl"
-              >
-                <FaClock className="w-6 h-6" /> Start Focus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          <Dashboard 
+            stats={stats} 
+            loading={loading.stats} 
+            setActiveTab={setActiveTab}
+          />
+        )}
 
         {activeTab === 'tasks' && (
-              <div className="p-6 md:p-8 bg-gray-700/30 rounded-xl backdrop-blur-sm border border-gray-600">
-              <h2 className="text-2xl md:text-3xl font-semibold mb-6 md:mb-8">Task Management</h2>
-              <div className="mb-6 flex flex-col sm:flex-row gap-4">
-                <input
-                  type="text"
-                  value={newTask}
-                  onChange={(e) => setNewTask(e.target.value)}
-                  placeholder="Add new task..."
-                  className="flex-1 p-3 md:p-4 bg-gray-800/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg"
-                  onKeyPress={(e) => e.key === 'Enter' && addTask()}
-                />
-                <button 
-                  onClick={addTask}
-                  className="bg-purple-600 hover:bg-purple-700 px-6 md:px-8 py-3 md:py-4 rounded-lg flex items-center justify-center gap-2 transition-all text-lg"
-                >
-                  <FaPlus className="w-5 h-5 md:w-6 md:h-6" /> Add
-                </button>
-              </div>
-            
-            {loading.tasks ? (
-              <div className="animate-pulse space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 bg-gray-800/50 rounded-lg"></div>
-              ))}
-            </div>
-          ) : (
-            <AnimatePresence>
-              {tasks.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-lg">
-                  No tasks found. Add your first task!
-                </div>
-              ) : (
-                <motion.div className="space-y-4">
-                  {tasks.map((task) => (
-                    <motion.div
-                      key={task._id}
-                      variants={taskVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      className="p-4 md:p-5 bg-gray-800/50 rounded-lg flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-4 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleTask(task._id, task.completed)}
-                          className="w-6 h-6 accent-purple-400 cursor-pointer"
-                        />
-                        <span className={`flex-1 text-lg ${task.completed ? 'line-through text-gray-400' : ''}`}>
-                          {task.text}
-                        </span>
-                        <span className="text-sm md:text-base text-gray-400">
-                          {new Date(task.dueDate).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => deleteTask(task._id)}
-                        className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-2"
-                      >
-                        <FaTrash className="w-5 h-5 md:w-6 md:h-6" />
-                      </button>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-        </div>
-      )}
-
+          <TaskManager
+            tasks={tasks}
+            newTask={newTask}
+            setNewTask={setNewTask}
+            addTask={addTask}
+            toggleTask={toggleTask}
+            deleteTask={deleteTask}
+            loading={loading.tasks}
+          />
+        )}
 
         {activeTab === 'pomodoro' && (
-          <div className="p-4 sm:p-6 bg-gray-700/30 rounded-xl backdrop-blur-sm border border-gray-600 text-center">
-            <h2 className="text-xl sm:text-2xl font-semibold mb-4 sm:mb-6">Focus Timer</h2>
-
-            <div className="mb-4 flex flex-col sm:flex-row items-center justify-center gap-2">
-              <label className="text-base sm:text-lg font-medium">Select Duration:</label>
-              <select
-                value={sessionDuration}
-                onChange={(e) => setSessionDuration(Number(e.target.value))}
-                disabled={isRunning}
-                className="p-2 bg-gray-800 border border-gray-600 rounded-md text-white text-sm sm:text-base"
-              >
-                <option value={300}>5 min</option>
-                <option value={600}>10 min</option>
-                <option value={900}>15 min</option>
-                <option value={1500}>25 min</option>
-                <option value={1800}>30 min</option>
-                <option value={3600}>60 min</option>
-              </select>
-            </div>
-
-            <div className="text-4xl sm:text-6xl font-bold mb-6 sm:mb-8 font-mono">
-              {formatTime(timeLeft)}
-            </div>
-
-            <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
-              <button 
-                onClick={startTimer}
-                disabled={isRunning}
-                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-lg font-semibold transition-all ${
-                  isRunning ? 'bg-purple-700 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
-                }`}
-              >
-                ▶ Start
-              </button>
-              <button 
-                onClick={pauseTimer}
-                disabled={!isRunning}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-yellow-600 hover:bg-yellow-700 rounded-xl text-sm sm:text-lg font-semibold"
-              >
-                {isPaused ? '▶ Resume' : '⏸ Pause'}
-              </button>
-              <button 
-                onClick={lapTimer}
-                disabled={!isRunning}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 hover:bg-blue-700 rounded-xl text-sm sm:text-lg font-semibold"
-              >
-                ⏱ Lap
-              </button>
-              <button 
-                onClick={stopTimer}
-                disabled={!isRunning}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-red-600 hover:bg-red-700 rounded-xl text-sm sm:text-lg font-semibold"
-              >
-                ⏹ Stop
-              </button>
-              <button 
-                onClick={resetTimer}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-600 hover:bg-gray-700 rounded-xl text-sm sm:text-lg font-semibold"
-              >
-                🔄 Reset
-              </button>
-            </div>
-
-            {laps.length > 0 && (
-              <div className="mt-4 sm:mt-6 text-left">
-                <h3 className="text-base sm:text-lg font-semibold mb-2">Laps:</h3>
-                <ul className="bg-gray-800 p-3 sm:p-4 rounded-lg max-h-32 sm:max-h-40 overflow-y-auto text-xs sm:text-sm">
-                  {laps.map((lap, index) => (
-                    <li key={index} className="py-1 border-b border-gray-700">
-                      Lap {index + 1}: {lap}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          <PomodoroTimer
+            sessionDuration={sessionDuration}
+            setSessionDuration={setSessionDuration}
+            timeLeft={timeLeft}
+            laps={laps}
+            isPaused={isPaused}
+            isRunning={isRunning}
+            startTimer={startTimer}
+            pauseTimer={pauseTimer}
+            lapTimer={lapTimer}
+            stopTimer={stopTimer}
+            resetTimer={resetTimer}
+            formatTime={formatTime}
+          />
         )}
+       {activeTab === 'reminders' && (
+        <RemindersManager tasks={tasks} loading={loading.tasks} />
+      )}
+      {activeTab === 'solutions' && <Solutions />}
       </main>
 
       <footer className="mt-auto py-4 sm:py-6 px-4 sm:px-6 border-t border-gray-700 backdrop-blur-sm bg-gray-900/80">
