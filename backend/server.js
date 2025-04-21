@@ -215,59 +215,6 @@ const validateObjectId = (req, res, next) => {
 };
 
 // Add detailed logging middleware
-router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
-  console.log('Update request:', {
-    taskId: req.params.id,
-    userId: req.user.uid,
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-
-  try {
-    const task = await Task.findOneAndUpdate(
-      { 
-        _id: new mongoose.Types.ObjectId(req.params.id),
-        userId: req.user.uid 
-      },
-      req.body,
-      { 
-        new: true,
-        runValidators: true,
-        projection: { __v: 0 } // Exclude version key
-      }
-    ).lean();
-
-    if (!task) {
-      console.warn('Task not found:', {
-        taskId: req.params.id,
-        existingTasks: await Task.find({ userId: req.user.uid }).select('_id').lean()
-      });
-      return res.status(404).json({ 
-        error: "Task not found",
-        recovery: "Please refresh your task list"
-      });
-    }
-
-    console.log('Update successful:', task);
-    broadcastUpdate();
-    res.json(task);
-
-  } catch (error) {
-    console.error('Update error:', {
-      error: error.message,
-      stack: error.stack,
-      taskId: req.params.id
-    });
-    res.status(500).json({ 
-      error: "Server error",
-      reference: `ERR-${Date.now()}`
-    });
-  }
-});
-
-
-
-
 router.delete('/tasks/:id', authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndDelete({ 
@@ -275,14 +222,67 @@ router.delete('/tasks/:id', authenticate, async (req, res) => {
       userId: req.user.uid 
     });
     
-    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!task) {
+      return res.status(404).json({ 
+        error: 'Task not found',
+        suggestion: 'Refresh your task list'
+      });
+    }
+    
     broadcastUpdate();
-    res.sendStatus(204);
+    res.status(200).json({ message: 'Task deleted successfully' });
   } catch (error) {
     console.error('Task deletion error:', error);
-    res.status(500).json({ error: 'Failed to delete task' });
+    res.status(500).json({ 
+      error: 'Failed to delete task',
+      details: error.message
+    });
   }
 });
+
+// Enhance the PUT endpoint
+router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+  try {
+    const update = { 
+      completed: req.body.completed,
+      updatedAt: new Date() 
+    };
+
+    const task = await Task.findOneAndUpdate(
+      { 
+        _id: new mongoose.Types.ObjectId(req.params.id),
+        userId: req.user.uid 
+      },
+      update,
+      { 
+        new: true,
+        runValidators: true,
+        projection: { __v: 0 }
+      }
+    ).lean();
+
+    if (!task) {
+      return res.status(404).json({ 
+        error: "Task not found",
+        recovery: "Refresh your task list"
+      });
+    }
+
+    broadcastUpdate();
+    res.json(task);
+
+  } catch (error) {
+    console.error('Update error:', error);
+    res.status(500).json({ 
+      error: "Server error",
+      code: `ERR-${Date.now()}`
+    });
+  }
+});
+
+
+
+
 
 // Session Endpoints
 // In your server.js routes
@@ -410,3 +410,23 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
 });
+
+
+router.get('/activity', authMiddleware, async (req, res) => {
+  try {
+    // Sample data - replace with actual database query
+    const activityData = {
+      productive: 420, // minutes
+      social: 120,
+      entertainment: 90,
+      sleep: 480
+    };
+    
+    res.json(activityData);
+  } catch (error) {
+    console.error('Activity data error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+module.exports = router;
