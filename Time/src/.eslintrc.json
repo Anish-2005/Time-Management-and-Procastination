@@ -1,0 +1,6 @@
+{
+    "globals": {
+      "IdleDetector": "readonly",
+      "DeviceOrientationEvent": "readonly"
+    }
+  }
