@@ -4,19 +4,20 @@ import { auth } from '../firebase';
 import { FaSignOutAlt, FaTasks, FaChartPie, FaClock, FaCalendarDay, FaPlus, FaTrash, FaBars } from 'react-icons/fa';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { FaBell } from 'react-icons/fa';
-import { FaLightbulb } from 'react-icons/fa';
-import RemindersManager from './components/RemindersManager';
-import 'react-toastify/dist/ReactToastify.css';
+import { FaBell, FaLightbulb, FaHashtag, FaRunning } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dashboard from './components/Dashboard';
 import TaskManager from './components/TaskManager';
 import PomodoroTimer from './components/PomodoroTimer';
 import Solutions from './components/Solutions';
+import ActivityTracker from './components/ActivityTracker';
+import SocialMediaTracker from './components/SocialMediaTracker';
+import RemindersManager from './components/RemindersManager';
+import 'react-toastify/dist/ReactToastify.css';
+
 const HomePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
-  const [newTask, setNewTask] = useState('');
   const [sessionDuration, setSessionDuration] = useState(1500);
   const [timeLeft, setTimeLeft] = useState(sessionDuration);
   const [laps, setLaps] = useState([]);
@@ -39,15 +40,7 @@ const HomePage = () => {
     return auth.currentUser?.getIdToken();
   }, []);
 
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-      if (window.innerWidth >= 768) setShowMobileMenu(false);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
+  // Fetch tasks function moved up
   const fetchTasks = useCallback(async () => {
     const controller = new AbortController();
     try {
@@ -63,14 +56,77 @@ const HomePage = () => {
       setTasks(data);
     } catch (error) {
       if (!axios.isCancel(error)) {
-        toast.error('Failed to load tasks');
-        console.error('Task fetch error:', error);
+        toast.error(error.response?.data?.error || 'Failed to load tasks');
       }
     } finally {
       setLoading(prev => ({ ...prev, tasks: false }));
     }
     return () => controller.abort();
   }, [getToken]);
+
+  // Add task function
+  const addTask = useCallback(async (taskData) => {
+    try {
+      const token = await getToken();
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/tasks`,
+        {
+          title: taskData.title,
+          description: taskData.description,
+          importance: taskData.importance
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      await fetchTasks();
+      toast.success('Task added successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to add task');
+    }
+  }, [getToken, fetchTasks]);
+
+  // Delete task function
+  const deleteTask = useCallback(async (taskId) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    try {
+      const token = await getToken();
+      await axios.delete(
+        `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      await fetchTasks();
+      toast.success('Task deleted');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete task');
+    }
+  }, [getToken, fetchTasks]);
+
+  // Toggle task function
+  const toggleTask = useCallback(async (taskId, completed) => {
+    try {
+      const token = await getToken();
+      const { data } = await axios.put(
+        `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
+        { completed: !completed },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setTasks(prev => prev.map(task => 
+        task._id === taskId ? data : task
+      ));
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Update failed');
+      await fetchTasks();
+    }
+  }, [getToken, fetchTasks]);
+
+  // Rest of your existing code
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) setShowMobileMenu(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchStats = useCallback(async () => {
     const controller = new AbortController();
@@ -92,7 +148,6 @@ const HomePage = () => {
     } catch (error) {
       if (!axios.isCancel(error)) {
         toast.error('Failed to load statistics');
-        console.error('Stats fetch error:', error);
       }
     } finally {
       setLoading(prev => ({ ...prev, stats: false }));
@@ -117,6 +172,7 @@ const HomePage = () => {
     fetchStats();
   }, [activeTab, fetchTasks, fetchStats]);
 
+  // Rest of timer-related functions and effects
   const alarmSound = new Audio('/alarm.mp3');
 
   const handleTimerAction = useCallback(async (action) => {
@@ -133,7 +189,6 @@ const HomePage = () => {
       );
     } catch (error) {
       toast.error(`Failed to ${action} session`);
-      console.error('Session error:', error);
     }
   }, [getToken, sessionDuration]);
 
@@ -195,95 +250,12 @@ const HomePage = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }, []);
 
-  const addTask = useCallback(async () => {
-    if (!newTask.trim()) {
-      toast.error('Task cannot be empty');
-      return;
-    }
-    try {
-      const token = await getToken();
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/tasks`,
-        { text: newTask },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setNewTask('');
-      await fetchTasks();
-      toast.success('Task added successfully');
-    } catch (error) {
-      toast.error('Failed to add task');
-      console.error('Add task error:', error);
-    }
-  }, [getToken, newTask, fetchTasks]);
-
-
-
-  const toggleTask = useCallback(async (taskId, completed) => {
-    try {
-      // Validate task ID format
-      if (!/^[0-9a-fA-F]{24}$/.test(taskId)) {
-        toast.error("Invalid task format");
-        return;
-      }
-  
-      // Get fresh token
-      const token = await auth.currentUser.getIdToken(true);
-      
-      const { data } = await axios.put(
-        `${process.env.REACT_APP_API_URL}/api/v1/tasks/${taskId}`,
-        { completed: !completed },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 5000
-        }
-      );
-  
-      // Update local state only after successful update
-      setTasks(prev => prev.map(task => 
-        task._id === taskId ? { ...task, ...data } : task
-      ));
-  
-    } catch (error) {
-      console.error("Update error details:", {
-        error: error.response?.data,
-        taskId,
-        status: error.response?.status
-      });
-  
-      if (error.response?.status === 404) {
-        // Refresh tasks if 404 occurs
-        toast.error("Task not found - refreshing list...");
-        await fetchTasks();
-      } else {
-        toast.error(error.response?.data?.error || "Update failed");
-      }
-    }
-  }, [fetchTasks]);
-
-
-  const deleteTask = useCallback(async (taskId) => {
-    try {
-      const token = await getToken();
-      await axios.delete(
-        `${process.env.REACT_APP_API_URL}/tasks/${taskId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      await fetchTasks();
-      toast.success('Task deleted');
-    } catch (error) {
-      toast.error('Failed to delete task');
-      console.error('Task delete error:', error);
-    }
-  }, [getToken, fetchTasks]);
-
   const taskVariants = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -20 }
   };
+
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100">
       <nav className="px-4 sm:px-6 py-4 border-b border-gray-700 backdrop-blur-sm bg-gray-900/80">
@@ -323,7 +295,19 @@ const HomePage = () => {
               >
                 <FaBell className="w-5 h-5" /> Reminders
               </button>
-          
+              <button 
+                onClick={() => setActiveTab('activity')}
+                className={`flex items-center gap-2 ${activeTab === 'activity' ? 'text-purple-400' : 'text-gray-300 hover:text-purple-300'}`}
+              >
+                <FaRunning className="w-5 h-5" /> Activity
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('social')}
+                className={`flex items-center gap-2 ${activeTab === 'social' ? 'text-purple-400' : 'text-gray-300 hover:text-purple-300'}`}
+              >
+                <FaHashtag className="w-5 h-5" /> Social
+              </button>
 
             </div>
           </div>
@@ -382,6 +366,17 @@ const HomePage = () => {
                 className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2">
                 <FaBell className="w-5 h-5" /> Reminders
               </button>
+              <button 
+                onClick={() => {setActiveTab('activity');setShowMobileMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2">              
+                <FaRunning className="w-5 h-5" /> Activity
+              </button>
+
+              <button 
+                onClick={() => {setActiveTab('social');setShowMobileMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-gray-800 rounded-lg flex items-center gap-2">              
+                <FaHashtag className="w-5 h-5" /> Social
+              </button>
 
             </motion.div>
             
@@ -398,18 +393,15 @@ const HomePage = () => {
           />
         )}
 
-        {activeTab === 'tasks' && (
-          <TaskManager
-            tasks={tasks}
-            newTask={newTask}
-            setNewTask={setNewTask}
-            addTask={addTask}
-            toggleTask={toggleTask}
-            deleteTask={deleteTask}
-            loading={loading.tasks}
-          />
-        )}
-
+{activeTab === 'tasks' && (
+  <TaskManager
+    tasks={tasks}
+    loading={loading.tasks}
+    addTask={addTask}
+    toggleTask={toggleTask}
+    deleteTask={deleteTask}
+  />
+)}
         {activeTab === 'pomodoro' && (
           <PomodoroTimer
             sessionDuration={sessionDuration}
@@ -430,6 +422,8 @@ const HomePage = () => {
         <RemindersManager tasks={tasks} loading={loading.tasks} />
       )}
       {activeTab === 'solutions' && <Solutions />}
+      {activeTab === 'activity' && <ActivityTracker />}
+{activeTab === 'social' && <SocialMediaTracker />}
       </main>
 
       <footer className="mt-auto py-4 sm:py-6 px-4 sm:px-6 border-t border-gray-700 backdrop-blur-sm bg-gray-900/80">
