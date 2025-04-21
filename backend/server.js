@@ -104,7 +104,26 @@ connectWithRetry();
 // Database Models
 const TaskSchema = new mongoose.Schema({
   userId: { type: String, required: true },
-  text: { type: String, required: true, trim: true, minlength: 3 },
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 100
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: ''
+  },
+  importance: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 100,
+    default: 50
+  },
   completed: { type: Boolean, default: false },
   dueDate: { type: Date, default: () => Date.now() + 86400000 },
   createdAt: { type: Date, default: Date.now },
@@ -113,19 +132,21 @@ const TaskSchema = new mongoose.Schema({
 
 TaskSchema.index({ userId: 1, completed: 1 });
 TaskSchema.index({ dueDate: 1 });
+TaskSchema.index({ importance: -1 });
+
 const Task = mongoose.model('Task', TaskSchema);
 
 const SessionSchema = new mongoose.Schema({
   userId: { type: String, required: true },
-  duration: { 
-    type: Number, 
+  duration: {
+    type: Number,
     required: true,
     min: [300, 'Minimum session duration is 5 minutes'],
     max: [14400, 'Maximum session duration is 4 hours']
   },
   startTime: { type: Date, required: true },
-  endTime: { 
-    type: Date, 
+  endTime: {
+    type: Date,
     required: true,
     validate: {
       validator: function(v) {
@@ -182,7 +203,8 @@ router.get('/health', (req, res) => {
 // Task Endpoints
 router.get('/tasks', authenticate, async (req, res) => {
   try {
-    const tasks = await Task.find({ userId: req.user.uid });
+    const tasks = await Task.find({ userId: req.user.uid })
+      .sort({ importance: -1, createdAt: -1 });
     res.json(tasks);
   } catch (error) {
     console.error('Tasks fetch error:', error);
@@ -192,11 +214,24 @@ router.get('/tasks', authenticate, async (req, res) => {
 
 router.post('/tasks', authenticate, async (req, res) => {
   try {
+    const { title, description, importance } = req.body;
+    
+    if (!title || title.trim().length < 3) {
+      return res.status(400).json({ error: 'Title must be at least 3 characters' });
+    }
+
+    // Fix importance calculation
+    const parsedImportance = parseInt(importance) || 50;
+    const clampedImportance = Math.min(Math.max(parsedImportance, 1), 100);
+
     const task = new Task({
       userId: req.user.uid,
-      ...req.body
+      title: title.trim(),
+      description: description?.trim() || '',
+      importance: clampedImportance,
+      dueDate: req.body.dueDate || Date.now() + 86400000
     });
-    
+
     await task.save();
     broadcastUpdate();
     res.status(201).json(task);
@@ -205,8 +240,6 @@ router.post('/tasks', authenticate, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-// Add validation middleware
 const validateObjectId = (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(400).json({ error: "Invalid task ID format" });
@@ -214,47 +247,51 @@ const validateObjectId = (req, res, next) => {
   next();
 };
 
-// Add detailed logging middleware
-router.delete('/tasks/:id', authenticate, async (req, res) => {
+router.delete('/tasks/:id', authenticate, validateObjectId, async (req, res) => {
   try {
-    const task = await Task.findOneAndDelete({ 
-      _id: req.params.id, 
-      userId: req.user.uid 
+    const task = await Task.findOneAndDelete({
+      _id: new mongoose.Types.ObjectId(req.params.id),
+      userId: req.user.uid
     });
-    
+
     if (!task) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Task not found',
         suggestion: 'Refresh your task list'
       });
     }
-    
+
     broadcastUpdate();
-    res.status(200).json({ message: 'Task deleted successfully' });
+    res.status(200).json({
+      message: 'Task deleted successfully',
+      deletedTask: task
+    });
   } catch (error) {
     console.error('Task deletion error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to delete task',
       details: error.message
     });
   }
 });
 
-// Enhance the PUT endpoint
-router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
+router.put('/tasks/:id', authenticate, validateObjectId, async (req, res) => {
   try {
-    const update = { 
+    const update = {
       completed: req.body.completed,
-      updatedAt: new Date() 
+      title: req.body.title?.trim(),
+      description: req.body.description?.trim(),
+      importance: req.body.importance,
+      updatedAt: new Date()
     };
 
     const task = await Task.findOneAndUpdate(
-      { 
+      {
         _id: new mongoose.Types.ObjectId(req.params.id),
-        userId: req.user.uid 
+        userId: req.user.uid
       },
       update,
-      { 
+      {
         new: true,
         runValidators: true,
         projection: { __v: 0 }
@@ -262,7 +299,7 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
     ).lean();
 
     if (!task) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: "Task not found",
         recovery: "Refresh your task list"
       });
@@ -270,29 +307,21 @@ router.put('/tasks/:id', validateObjectId, authenticate, async (req, res) => {
 
     broadcastUpdate();
     res.json(task);
-
   } catch (error) {
     console.error('Update error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Server error",
       code: `ERR-${Date.now()}`
     });
   }
 });
 
-
-
-
-
 // Session Endpoints
-// In your server.js routes
 router.post('/sessions', authenticate, async (req, res) => {
   try {
-    const { action } = req.body;
+    const { action, duration } = req.body;
     const now = new Date();
-    
-    // Validate and parse duration
-    const duration = parseInt(req.body.duration, 10);
+
     if (isNaN(duration) || duration < 300 || duration > 14400) {
       return res.status(400).json({ error: 'Invalid session duration (5min-4hr)' });
     }
@@ -300,13 +329,11 @@ router.post('/sessions', authenticate, async (req, res) => {
     let session;
     switch (action) {
       case 'start':
-        const endTime = new Date(now.getTime() + duration * 1000);
-        
         session = new FocusSession({
           userId: req.user.uid,
           duration,
           startTime: now,
-          endTime: endTime
+          endTime: new Date(now.getTime() + duration * 1000)
         });
         break;
 
@@ -323,23 +350,19 @@ router.post('/sessions', authenticate, async (req, res) => {
     }
 
     if (!session) return res.status(404).json({ error: 'Session not found' });
-    
-    // Validate dates before saving
-    if (isNaN(session.startTime.getTime()) || isNaN(session.endTime.getTime())) {
-      return res.status(400).json({ error: 'Invalid date values' });
-    }
 
     await session.save();
     broadcastUpdate();
     res.status(201).json(session);
   } catch (error) {
     console.error('Session error:', error);
-    res.status(400).json({ 
+    res.status(400).json({
       error: error.message,
-      details: error.errors 
+      details: error.errors
     });
   }
 });
+
 // Stats Endpoint
 router.get('/stats', authenticate, async (req, res) => {
   try {
@@ -373,7 +396,6 @@ app.use((err, req, res, next) => {
 // WebSocket Server Setup
 const server = app.listen(process.env.PORT || 5001, () => {
   console.log(`Server running in ${isProduction ? 'production' : 'development'} mode on port ${process.env.PORT || 5001}`);
-  console.log(`Database: ${process.env.MONGODB_URI.split('@')[1].split('/')[0]}`);
 });
 
 server.on('upgrade', (request, socket, head) => {
@@ -382,7 +404,7 @@ server.on('upgrade', (request, socket, head) => {
   });
 });
 
-// Streak Calculation
+// Helper Functions
 function calculateStreak(sessions) {
   if (!sessions.length) return 0;
   
@@ -411,22 +433,4 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-
-router.get('/activity', authMiddleware, async (req, res) => {
-  try {
-    // Sample data - replace with actual database query
-    const activityData = {
-      productive: 420, // minutes
-      social: 120,
-      entertainment: 90,
-      sleep: 480
-    };
-    
-    res.json(activityData);
-  } catch (error) {
-    console.error('Activity data error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-module.exports = router;
+module.exports = app;
