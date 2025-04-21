@@ -316,19 +316,31 @@ router.put('/tasks/:id', authenticate, validateObjectId, async (req, res) => {
   }
 });
 
-// Session Endpoints
+// In your routes (probably in index.js or sessions.js)
 router.post('/sessions', authenticate, async (req, res) => {
   try {
-    const { action, duration } = req.body;
+    const { action } = req.body;
     const now = new Date();
-
-    if (isNaN(duration) || duration < 300 || duration > 14400) {
-      return res.status(400).json({ error: 'Invalid session duration (5min-4hr)' });
+    
+    // Validate action type first
+    const validActions = ['start', 'stop', 'pause', 'resume', 'reset'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ error: 'Invalid session action' });
     }
 
+    // Session handling
     let session;
     switch (action) {
       case 'start':
+        // Validate duration only for start action
+        const duration = req.body.duration;
+        if (!duration || duration < 300 || duration > 14400) {
+          return res.status(400).json({ 
+            error: 'Invalid session duration (5min-4hr)',
+            validRange: { min: 300, max: 14400 }
+          });
+        }
+        
         session = new FocusSession({
           userId: req.user.uid,
           duration,
@@ -346,7 +358,12 @@ router.post('/sessions', authenticate, async (req, res) => {
         break;
 
       default:
-        return res.status(400).json({ error: 'Invalid session action' });
+        // Handle pause/resume/reset without duration validation
+        session = await FocusSession.findOneAndUpdate(
+          { userId: req.user.uid },
+          { $set: { status: action } },
+          { new: true }
+        );
     }
 
     if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -354,6 +371,7 @@ router.post('/sessions', authenticate, async (req, res) => {
     await session.save();
     broadcastUpdate();
     res.status(201).json(session);
+
   } catch (error) {
     console.error('Session error:', error);
     res.status(400).json({
