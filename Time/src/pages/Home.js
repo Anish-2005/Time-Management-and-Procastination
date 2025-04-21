@@ -261,7 +261,7 @@ const HomePage = () => {
       <nav className="px-4 sm:px-6 py-4 border-b border-gray-700 backdrop-blur-sm bg-gray-900/80">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link to="/" className="text-xl sm:text-2xl font-bold text-purple-400 flex items-center gap-2 hover:text-purple-300 transition-colors">
+            <Link to="/" className="mr-16 text-xl sm:text-2xl font-bold text-purple-400 flex items-center gap-2 hover:text-purple-300 transition-colors">
               <FaCalendarDay className="w-5 h-5 sm:w-6 sm:h-6" /> FOCUS
             </Link>
             <div className="hidden md:flex gap-6 ml-4">
