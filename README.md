@@ -546,7 +546,7 @@ SOFTWARE.
 
 ### Professional Support
 - **Email** - anishseth0510@gmail.com
-- **LinkedIn** - [Connect with the team](https://linkedin.com/in/anish-seth)
+- **LinkedIn** - [Connect with the team](https://linkedin.com/in/anishseth)
 - **Website** - [Official project page](https://time-management-app-theta.vercel.app)
 
 ### Acknowledgments
@@ -562,6 +562,6 @@ SOFTWARE.
 
 **Built with ❤️ for productivity enthusiasts worldwide**
 
-[🌟 Star this repo](https://github.com/yourusername/Time-Management-and-Procrastination) | [🐛 Report Bug](https://github.com/yourusername/Time-Management-and-Procrastination/issues) | [✨ Request Feature](https://github.com/yourusername/Time-Management-and-Procrastination/issues)
+[🌟 Star this repo]| [🐛 Report Bug] | [✨ Request Feature]
 
 </div>
