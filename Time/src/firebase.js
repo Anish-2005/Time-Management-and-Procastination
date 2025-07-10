@@ -8,16 +8,29 @@ import {
   browserLocalPersistence
 } from "firebase/auth";
 
-// Your Firebase config
+// Your Firebase config from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyBnAZWGMiC8hJ1YEzdrobUUy4MNto-9KWU",
-  authDomain: "time-management-e03d7.firebaseapp.com",
-  projectId: "time-management-e03d7",
-  storageBucket: "time-management-e03d7.appspot.com",
-  messagingSenderId: "897082819655",
-  appId: "1:897082819655:web:9349d9921b776be19e9d62",
-  measurementId: "G-YHH0V3901Q"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
+
+// Validate required Firebase configuration
+const requiredFirebaseEnvVars = [
+  'REACT_APP_FIREBASE_API_KEY',
+  'REACT_APP_FIREBASE_AUTH_DOMAIN',
+  'REACT_APP_FIREBASE_PROJECT_ID',
+  'REACT_APP_FIREBASE_APP_ID'
+];
+
+const missingVars = requiredFirebaseEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error('Missing required Firebase environment variables:', missingVars);
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

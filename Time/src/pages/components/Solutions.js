@@ -12,6 +12,13 @@ const Solutions = () => {
 
   const handleAsk = async () => {
     if (!query.trim()) return;
+    
+    // Check if API key is available
+    if (!process.env.REACT_APP_GEMINI_API_KEY) {
+      setResponse('API key not configured. Please check your environment variables.');
+      return;
+    }
+    
     setLoading(true);
     setResponse('');
   
@@ -19,7 +26,7 @@ const Solutions = () => {
   
     try {
       const { data } = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBrFdHlgr-mhXs13iFBeaAnG299jCJYC3M`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.REACT_APP_GEMINI_API_KEY}`,
         {
             contents: [{ parts: [{ text: fullQuery }] }]
           },
